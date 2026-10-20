@@ -20,7 +20,7 @@ static class SelfTest {
     Assert(capture.EncodeChanged(still,0) is not null,"First frame missing");Assert(capture.EncodeChanged(still,83) is null,"Static frame sent twice");
     still.SetPixel(1,1,Color.Red);Assert(capture.EncodeChanged(still,166) is not null,"Small screen change missed");Assert(capture.EncodeChanged(still,2200) is not null,"Refresh frame missing");
    }results.Add("Static frame suppression, single-pixel change and periodic refresh passed");
-   TestFrameFlow().GetAwaiter().GetResult();results.Add("Slow consumer: one frame in flight, stale ACK rejection, cancellation and recovery passed");
+   Task.Run(TestFrameFlow).GetAwaiter().GetResult();results.Add("Slow consumer: one frame in flight, stale ACK rejection, cancellation and recovery passed");
    TestInput();results.Add("Native Windows keyboard injection and release passed");
    Task.Run(()=>RoundTrip(jpeg)).GetAwaiter().GetResult();results.Add("Two native clients: live relay pairing, encrypted screen frame, encrypted input and disconnect passed");
    GuiRegression.Run();results.Add("Two GUI clients: real consent, matching inline verification panels, at least 3 displayed frames, read-only input denial, explicit control grant, actual relayed host cursor movement and disconnect without extra top-level windows passed");
