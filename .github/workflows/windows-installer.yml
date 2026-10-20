@@ -1,0 +1,75 @@
+name: Windows installer
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Ensure Inno Setup is available
+        shell: pwsh
+        run: |
+          if (!(Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
+          }
+      - name: Test and build installer
+        shell: pwsh
+        run: ./build-windows.ps1 -Version "1.0.${{ github.run_number }}"
+      - name: Verify silent install, installed app, and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = Join-Path $env:RUNNER_TEMP 'HelpdeskSmoke'
+          $setup = Get-ChildItem release/ITHelpdesk-Setup-*.exe | Select-Object -First 1
+          $process = Start-Process $setup.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$target") -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Setup failed: $($process.ExitCode)" }
+          $app = Start-Process "$target/ITHelpdesk.exe" -PassThru
+          Start-Sleep -Seconds 8
+          $app.Refresh()
+          if ($app.HasExited) { throw 'Installed application exited unexpectedly' }
+          Stop-Process -Id $app.Id
+          $uninstall = Start-Process "$target/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
+      - name: Installer and checksum
+        shell: pwsh
+        run: |
+          Get-ChildItem release/*.exe | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Set-Content "$($_.FullName).sha256" -Encoding ascii
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ITHelpdesk-Windows-Installer
+          path: release/*
+          if-no-files-found: error
+          retention-days: 30
+  release:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ITHelpdesk-Windows-Installer
+          path: release
+      - name: Publish downloadable installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >-
+          gh release create "v1.0.${{ github.run_number }}" release/*
+          --target "${{ github.sha }}"
+          --title "IT Helpdesk 1.0.${{ github.run_number }}"
+          --notes "Монгол Windows desktop хувилбар. Installer болон SHA256 хавсаргав. Нэг компьютерийн офлайн SQLite сан; олон хэрэглэгчийн серверийн горим агуулаагүй."
