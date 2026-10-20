@@ -25,7 +25,7 @@ static class GuiRegression {
     }
     if(phase==1&&Environment.TickCount64-phaseTime>300){if(host.InputAppliedCount!=0)throw new Exception("Read-only peer could inject input");phase=2;Find<Button>(guest.Viewer!,"RequestControl").PerformClick();}
     if(phase==2&&guest.Viewer?.ControlAllowed==true){phase=3;_=guest.SendProtected(new{k="input",action="move",x=0.01,y=0.99});}
-    if(phase==3&&host.InputAppliedCount>0){var bounds=Screen.PrimaryScreen!.Bounds;var point=Cursor.Position;if(Math.Abs(point.X-(bounds.Left+(int)(0.01*(bounds.Width-1))))>2)throw new Exception("Remote pointer command did not move host cursor");phase=4;Find<Button>(guest,"StopSession").PerformClick();}
+    if(phase==3&&host.PointerAppliedCount>0){var bounds=Screen.PrimaryScreen!.Bounds;var point=Cursor.Position;if(Math.Abs(point.X-(bounds.Left+(int)(0.01*(bounds.Width-1))))>2)throw new Exception("Remote pointer command did not move host cursor");phase=4;Find<Button>(guest,"StopSession").PerformClick();}
     if(phase==4&&!host.HasSession&&!host.Sharing&&!guest.HasSession){complete=true;timer.Stop();}
    }catch(Exception e){failure=e;timer.Stop();}
   };

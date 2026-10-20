@@ -13,6 +13,7 @@ sealed partial class MainForm : Form {
  internal int ReceivedFrames {get;private set;}
  internal int SentFrames;
  internal int InputAppliedCount {get;private set;}
+ internal int PointerAppliedCount {get;private set;}
  bool controlRequestPending;
  internal bool Sharing=>capture!=null;
  internal bool HasSession=>sid!="";
@@ -50,7 +51,7 @@ sealed partial class MainForm : Form {
      if(accepted){crypto=new SessionCrypto();pending=true;end.Enabled=true;request.Enabled=false;await net!.Send(new{t="accept",id=requestId,key=crypto.PublicKey,control=granted});}else await net!.Send(new{t="reject",id=requestId});break;
     case "accepted":
      if(crypto==null){await net!.Send(new{t="end"});return;}
-     ReceivedFrames=0;SentFrames=0;InputAppliedCount=0;crypto.Agree(m.S("key"));sid=m.S("sid");role=m.S("role");canControl=m.B("control");pending=false;localVerified=remoteVerified=false;end.Enabled=true;
+     ReceivedFrames=0;SentFrames=0;InputAppliedCount=0;PointerAppliedCount=0;crypto.Agree(m.S("key"));sid=m.S("sid");role=m.S("role");canControl=m.B("control");pending=false;localVerified=remoteVerified=false;end.Enabled=true;
      lastPeerPacket=Environment.TickCount64;heartbeat=new CancellationTokenSource();var heartToken=heartbeat.Token;
      _=Task.Run(async()=>{try{while(!heartToken.IsCancellationRequested){await Task.Delay(5000,heartToken);if(Environment.TickCount64-lastPeerPacket>25000){UI(()=>{Disconnect();status.Text="Нөгөө талын хариу тасарсан тул хуваалцахыг зогсоолоо.";});return;}await SendProtected(new{k="alive"});}}catch(OperationCanceledException){}});
      session.Text=$"{m.S("peer")} · Холболтын кодоо баталгаажуулна уу";status.Text="Баталгаажуулах цонхонд кодоо харьцуулж, хоёр тал зөвшөөрнө.";
@@ -73,7 +74,7 @@ sealed partial class MainForm : Form {
      else if(data.S("k")=="control_denied"&&role=="viewer")viewer?.ControlDenied();
      else if(data.S("k")=="input_denied"&&role=="viewer")viewer?.InputDenied();
      else if(data.S("k")=="input"&&role=="host"&&canControl&&localVerified&&remoteVerified){
-      try{input.Apply(data);InputAppliedCount++;}catch(Exception error)when(error is InvalidOperationException or System.ComponentModel.Win32Exception){await SendProtected(new{k="input_denied"});status.Text="Windows удирдлагыг зөвшөөрсөнгүй. Өндөр эрхтэй цонх удирдах бол программыг администратороор нээнэ үү.";}
+      try{input.Apply(data);InputAppliedCount++;if(data.S("action")=="move")PointerAppliedCount++;}catch(Exception error)when(error is InvalidOperationException or System.ComponentModel.Win32Exception){await SendProtected(new{k="input_denied"});status.Text="Windows удирдлагыг зөвшөөрсөнгүй. Өндөр эрхтэй цонх удирдах бол программыг администратороор нээнэ үү.";}
      }break;
     case "ended":case "cancelled":consent?.Close();StopSession();status.Text=m.S("message");break;
     case "error":status.Text=m.S("message");if(pending)StopSession();break;
