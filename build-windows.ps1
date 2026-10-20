@@ -4,7 +4,8 @@ Set-Location $PSScriptRoot
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be MAJOR.MINOR.PATCH' }
 dotnet publish native/Client/RainyRemote.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None "-p:Version=$Version" -o dist/native
 if ($LASTEXITCODE -ne 0) { throw 'Native client build failed' }
-$test=Start-Process -FilePath (Join-Path $PSScriptRoot 'dist/native/RainyRemote.exe') -ArgumentList '--self-test' -WorkingDirectory $PSScriptRoot -Wait -PassThru
+$test=Start-Process -FilePath (Join-Path $PSScriptRoot 'dist/native/RainyRemote.exe') -ArgumentList '--self-test' -WorkingDirectory $PSScriptRoot -PassThru
+if (!$test.WaitForExit(120000)) { Stop-Process -Id $test.Id -Force; throw 'Native integration test exceeded 120 seconds' }
 if (Test-Path 'self-test-result.json') { Get-Content 'self-test-result.json' }
 if ($test.ExitCode -ne 0 -or !(Test-Path 'self-test-result.json')) { throw 'Native integration tests failed' }
 if (!((Get-Content 'self-test-result.json' -Raw | ConvertFrom-Json).ok)) { throw 'Native test results failed' }
