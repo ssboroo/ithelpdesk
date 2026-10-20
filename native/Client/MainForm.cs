@@ -4,6 +4,7 @@ sealed class MainForm : Form {
  readonly TextBox server=new(),target=new(),pin=new();readonly Label myId=new(),myPin=new(),status=new(),session=new();
  readonly Button connect=new(),request=new(),verify=new(),end=new();readonly RemoteInput input=new();readonly SemaphoreSlim encryptedSender=new(1,1);
  Transport? net;SessionCrypto? crypto;string sid="",role="";bool canControl,localVerified,remoteVerified,pending;CancellationTokenSource? capture;
+ CancellationTokenSource? heartbeat;long lastPeerPacket;
  ViewerForm? viewer;Form? consent;Form? banner;bool closingBanner;
  readonly string settings=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RainyRemote3","server.txt");
  public MainForm(){
@@ -61,11 +62,13 @@ sealed class MainForm : Form {
     case "accepted":
      if(crypto==null){await net!.Send(new{t="end"});return;}
      crypto.Agree(m.S("key"));sid=m.S("sid");role=m.S("role");canControl=m.B("control");pending=false;localVerified=remoteVerified=false;end.Enabled=true;
+     lastPeerPacket=Environment.TickCount64;heartbeat=new CancellationTokenSource();var heartToken=heartbeat.Token;
+     _=Task.Run(async()=>{try{while(!heartToken.IsCancellationRequested){await Task.Delay(5000,heartToken);if(Environment.TickCount64-lastPeerPacket>25000){UI(()=>{Disconnect();status.Text="Нөгөө талын хариу тасарсан тул хуваалцахыг зогсоолоо.";});return;}await SendProtected(new{k="alive"});}}catch(OperationCanceledException){}});
      session.Text=$"{m.S("peer")} · Баталгаажуулах код: {crypto.Fingerprint}";status.Text="Хоёр талын код ИЖИЛ эсэхийг утсаар харьцуулна. Дараа нь код таарсныг хоёр тал батална.";
      if(role=="host"){verify.Enabled=true;Text="RAINY Remote · Хуваалцах зөвшөөрөл хүлээж байна";}
      else if(role=="viewer"){viewer=new ViewerForm(m.S("peer"),crypto.Fingerprint,canControl,SendProtected,()=>_=Verify(),Disconnect);viewer.Show(this);}else Disconnect();break;
     case "data":
-     if(crypto==null||m.S("sid")!=sid)return;var data=crypto.Open(sid,m);
+     if(crypto==null||m.S("sid")!=sid)return;var data=crypto.Open(sid,m);lastPeerPacket=Environment.TickCount64;
      if(data.S("k")=="ready"){remoteVerified=true;MaybeCapture();}
      else if(data.S("k")=="frame"&&role=="viewer"&&localVerified&&remoteVerified){viewer?.Frame(Convert.FromBase64String(data.S("jpeg")));status.Text="Алсын дэлгэц дамжиж байна";}
      else if(data.S("k")=="input"&&role=="host"&&canControl&&localVerified&&remoteVerified)input.Apply(data);break;
@@ -89,7 +92,7 @@ sealed class MainForm : Form {
  }
  void Disconnect(){if(net?.IsOpen==true)_=net.Send(new{t="end"}).ContinueWith(_=>{});StopSession();status.Text="Холболт салгасан. Дэлгэц дамжуулахгүй.";}
  void StopSession(){
-  capture?.Cancel();capture=null;input.Release();sid="";pending=false;localVerified=remoteVerified=false;role="";canControl=false;
+  heartbeat?.Cancel();heartbeat=null;capture?.Cancel();capture=null;input.Release();sid="";pending=false;localVerified=remoteVerified=false;role="";canControl=false;
   crypto?.Dispose();crypto=null;verify.Enabled=false;end.Enabled=false;request.Enabled=true;session.Text="Холболт нээгдээгүй";Text="RAINY Remote · Бие даасан алсын удирдлага";
   if(viewer!=null){var old=viewer;viewer=null;old.InternalClose=true;old.Close();}
   if(banner!=null){var old=banner;banner=null;closingBanner=true;old.Close();closingBanner=false;}

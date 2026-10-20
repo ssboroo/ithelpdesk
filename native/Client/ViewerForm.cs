@@ -1,7 +1,11 @@
 using System.Text.Json;
 namespace RainyRemote;
+sealed class RemoteScreen : PictureBox {
+ public RemoteScreen(){SetStyle(ControlStyles.Selectable,true);TabStop=true;}
+ protected override bool IsInputKey(Keys keyData)=>true;
+}
 sealed class ViewerForm : Form {
- readonly PictureBox screen=new(){Dock=DockStyle.Fill,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.FromArgb(13,22,35),TabStop=true};
+ readonly RemoteScreen screen=new(){Dock=DockStyle.Fill,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.FromArgb(13,22,35),TabStop=true};
  readonly Func<object,Task> send;readonly Action stop;bool verified,control;long moved;public bool InternalClose;
  public ViewerForm(string peer,string fingerprint,bool canControl,Func<object,Task> send,Action verify,Action stop){
   this.send=send;this.stop=stop;control=canControl;
@@ -16,8 +20,9 @@ sealed class ViewerForm : Form {
   screen.MouseDown+=async(_,e)=>{if(!verified||!control||!Position(e.Location,out var x,out var y))return;screen.Focus();await send(new{k="input",action="move",x,y});await send(new{k="input",action="button",button=ButtonIndex(e.Button),up=false});};
   screen.MouseUp+=async(_,e)=>{if(verified&&control)await send(new{k="input",action="button",button=ButtonIndex(e.Button),up=true});};
   screen.MouseWheel+=async(_,e)=>{if(verified&&control)await send(new{k="input",action="wheel",delta=e.Delta});};
-  KeyDown+=async(_,e)=>{if(!verified||!control)return;e.SuppressKeyPress=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=false});};
-  KeyUp+=async(_,e)=>{if(!verified||!control)return;e.SuppressKeyPress=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=true});};
+  KeyDown+=async(_,e)=>{if(!verified||!control||!screen.Focused)return;e.Handled=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=false});};
+  KeyUp+=async(_,e)=>{if(!verified||!control||!screen.Focused)return;e.Handled=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=true});};
+  screen.LostFocus+=async(_,_)=>{if(verified&&control)await send(new{k="input",action="release"});};
   Deactivate+=async(_,_)=>{if(verified&&control)await send(new{k="input",action="release"});};
   FormClosing+=(_,e)=>{if(!InternalClose){e.Cancel=true;BeginInvoke((Action)(()=>stop()));}};
   FormClosed+=(_,_)=>{screen.Image?.Dispose();screen.Image=null;};

@@ -15,8 +15,8 @@ function cancel(id:string,reason='Холболтын хүсэлт цуцлагд
 function end(s:Socket,reason='Холболт саллаа'){
  if(s.data.pending)cancel(s.data.pending,reason);
  const peer=s.data.peer;s.data.peer=undefined;s.data.sid=undefined;s.data.last=0;
- if(peer){peer.data.peer=undefined;peer.data.sid=undefined;peer.data.last=0;send(peer,{t:'ended',message:reason});}
- send(s,{t:'ended',message:reason});
+ if(peer){peer.data.peer=undefined;peer.data.sid=undefined;peer.data.last=0;send(peer,{t:'ended',message:reason});peer.data.pin=random(6);send(peer,{t:'registered',id:peer.data.id,pin:peer.data.pin});}
+ send(s,{t:'ended',message:reason});if(peer){s.data.pin=random(6);send(s,{t:'registered',id:s.data.id,pin:s.data.pin});}
 }
 const keyOK=(v:unknown)=>typeof v==='string'&&v.length>=50&&v.length<=1024&&/^[A-Za-z0-9+/=]+$/.test(v);
 const server=Bun.serve<State>({

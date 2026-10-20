@@ -15,9 +15,17 @@ static class SelfTest {
    var wrong=Json(a.Seal("test",new{k="input"}));bool rejected=false;try{b.Open("other-session",wrong);}catch(CryptographicException){rejected=true;}Assert(rejected,"Session isolation failed");results.Add("ECDH, AES-GCM, replay and session isolation passed");
    byte[] jpeg=Desktop.Capture();using(var stream=new MemoryStream(jpeg))using(var image=Image.FromStream(stream)){Assert(image.Width<=1280&&image.Height<=720,"Capture dimensions");}results.Add("Native Windows screen capture passed");
    using(var viewer=new ViewerForm("test","12345678",false,_=>Task.CompletedTask,()=>{},()=>{})){viewer.Frame(jpeg);Assert(viewer.Controls.Count>0,"Viewer UI");}results.Add("Native viewer JPEG rendering passed");
+   TestInput();results.Add("Native Windows keyboard injection and release passed");
    Task.Run(()=>RoundTrip(jpeg)).GetAwaiter().GetResult();results.Add("Two native clients: live relay pairing, encrypted screen frame, encrypted input and disconnect passed");
    File.WriteAllText("self-test-result.json",JsonSerializer.Serialize(new{ok=true,results},new JsonSerializerOptions{WriteIndented=true}));Environment.ExitCode=0;
   }catch(Exception e){File.WriteAllText("self-test-result.json",JsonSerializer.Serialize(new{ok=false,results,error=e.ToString()},new JsonSerializerOptions{WriteIndented=true}));Environment.ExitCode=1;}
+ }
+ static void TestInput(){
+  using var form=new Form{Text="RAINY controlled test target",Width=400,Height=180,StartPosition=FormStartPosition.CenterScreen};
+  var text=new TextBox{Dock=DockStyle.Fill};form.Controls.Add(text);form.Show();form.Activate();text.Focus();Application.DoEvents();Thread.Sleep(100);
+  var inject=new RemoteInput();
+  try{inject.Apply(Json(new{k="input",action="key",key=65,up=false}));inject.Apply(Json(new{k="input",action="key",key=65,up=true}));Thread.Sleep(100);Application.DoEvents();Assert(text.Text.ToLowerInvariant()=="a","Native keyboard input did not reach controlled TextBox");}
+  finally{inject.Release();form.Close();}
  }
  static async Task RoundTrip(byte[] jpeg){
   using var host=new Transport();using var viewer=new Transport();var h=Channel.CreateUnbounded<JsonElement>();var v=Channel.CreateUnbounded<JsonElement>();

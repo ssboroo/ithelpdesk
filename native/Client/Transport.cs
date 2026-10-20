@@ -22,8 +22,9 @@ sealed class Transport : IDisposable {
  public async Task Send(object value){
   byte[] bytes=JsonSerializer.SerializeToUtf8Bytes(value);
   if(bytes.Length>1500000)throw new InvalidOperationException("Багц хэт том");
-  await sender.WaitAsync(stop.Token);
-  try{if(!IsOpen)throw new IOException("Сервертэй холболт тасарсан");await socket.SendAsync(new ArraySegment<byte>(bytes),WebSocketMessageType.Text,true,stop.Token);}
+  using var timeout=CancellationTokenSource.CreateLinkedTokenSource(stop.Token);timeout.CancelAfter(TimeSpan.FromSeconds(12));
+  await sender.WaitAsync(timeout.Token);
+  try{if(!IsOpen)throw new IOException("Сервертэй холболт тасарсан");await socket.SendAsync(new ArraySegment<byte>(bytes),WebSocketMessageType.Text,true,timeout.Token);}
   finally{sender.Release();}
  }
  async Task Receive(){
@@ -46,7 +47,7 @@ sealed class SessionCrypto : IDisposable {
  readonly ECDiffieHellman exchange=ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
  byte[]? key;long sent,last;
  public string PublicKey=>Convert.ToBase64String(exchange.ExportSubjectPublicKeyInfo());
- public string Fingerprint=>key==null?"":Convert.ToHexString(SHA256.HashData(key))[..8];
+ public string Fingerprint=>key==null?"":Convert.ToHexString(SHA256.HashData(key))[..16];
  public void Agree(string peer){using var remote=ECDiffieHellman.Create();remote.ImportSubjectPublicKeyInfo(Convert.FromBase64String(peer),out _);key=exchange.DeriveKeyFromHash(remote.PublicKey,HashAlgorithmName.SHA256);sent=last=0;}
  public object Seal(string sid,object value){
   if(key==null)throw new InvalidOperationException("Түлхүүр бэлэн биш");
