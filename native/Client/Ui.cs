@@ -8,7 +8,7 @@ static class Ui {
  public static FlowLayoutPanel Stack(int padding=24)=>new(){Dock=DockStyle.Fill,BackColor=Color.White,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(padding),AutoScroll=true};
  public static void Field(TextBox box,string placeholder,int width=350){box.Width=width;box.Font=new Font("Segoe UI",15);box.PlaceholderText=placeholder;box.BorderStyle=BorderStyle.FixedSingle;box.Margin=new Padding(0,4,0,18);}
  public static void FitStack(FlowLayoutPanel panel){
-  void Fit(){int width=Math.Max(100,panel.ClientSize.Width-panel.Padding.Horizontal-4);foreach(Control child in panel.Controls){if(child is Label label){label.MaximumSize=new Size(width,0);}else child.Width=Math.Min(600,width);}}
+  void Fit(){int width=Math.Max(100,panel.ClientSize.Width-panel.Padding.Horizontal-4);foreach(Control child in panel.Controls){if(child is Label label){label.MaximumSize=new Size(width,0);}else{child.Width=Math.Min(600,width);if(child is Button button)button.Height=Math.Max(44,TextRenderer.MeasureText(button.Text,button.Font,new Size(Math.Max(50,child.Width-16),1000),TextFormatFlags.WordBreak).Height+16);}}}
   panel.Resize+=(_,_)=>Fit();panel.ControlAdded+=(_,_)=>Fit();
  }
  public static string Code(string code)=>string.Join("  ",Enumerable.Range(0,(code.Length+3)/4).Select(i=>code.Substring(i*4,Math.Min(4,code.Length-i*4))));

@@ -33,9 +33,9 @@ static class GuiRegression {
      phase=1;phaseTime=Environment.TickCount64;_=guest.SendProtected(new{k="input",action="move",x=0.01,y=0.99});
     }
     if(phase==1&&Environment.TickCount64-phaseTime>300){if(host.InputAppliedCount!=0)throw new Exception("Read-only peer could inject input");phase=2;Find<Button>(guest.Viewer!,"RequestControl").PerformClick();}
-    if(phase==2&&guest.Viewer?.ControlAllowed==true){phase=3;_=guest.SendProtected(new{k="input",action="move",x=0.01,y=0.99});}
-    if(phase==3&&host.PointerAppliedCount>0){var bounds=Screen.PrimaryScreen!.Bounds;var point=Cursor.Position;if(Math.Abs(point.X-(bounds.Left+(int)(0.01*(bounds.Width-1))))>2)throw new Exception("Remote pointer command did not move host cursor");phase=4;Find<Button>(guest.Viewer!,"StopViewer").PerformClick();}
-    if(phase==4&&!host.HasSession&&!host.Sharing&&!guest.HasSession){phase=5;interrupted=host.Connection;interrupted!.Dispose();}
+    if(phase==2&&guest.Viewer?.ControlAllowed==true){phase=3;_=guest.SendProtected(new{k="input",action="move",x=0.01,y=0.99,probe=17});}
+    if(phase==3&&host.LastPointerProbe==17){var bounds=Screen.PrimaryScreen!.Bounds;var point=host.LastPointerApplied;if(Math.Abs(point.X-(bounds.Left+(int)(0.01*(bounds.Width-1))))>2)throw new Exception("Remote pointer command did not move host cursor");phase=4;Find<Button>(guest.Viewer!,"Fullscreen").PerformClick();Find<Button>(guest.Viewer!,"StopViewer").PerformClick();}
+    if(phase==4&&!host.HasSession&&!host.Sharing&&!guest.HasSession){if(guest.FormBorderStyle!=FormBorderStyle.Sizable)throw new Exception("Disconnect left fullscreen chrome hidden");phase=5;interrupted=host.Connection;interrupted!.Dispose();}
     if(phase==5&&host.Connection!=interrupted&&host.Connection?.IsOpen==true&&host.DeviceId!=""){if(host.HasSession||host.Sharing)throw new Exception("Reconnect restored a session without consent");complete=true;timer.Stop();}
    }catch(Exception e){failure=e;timer.Stop();}
   };

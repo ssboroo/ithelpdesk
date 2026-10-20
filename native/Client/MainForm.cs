@@ -14,6 +14,8 @@ sealed partial class MainForm : Form {
  internal int ReceivedFrames {get;private set;}
  internal int SentFrames;
  internal int InputAppliedCount {get;private set;}
+ internal long LastPointerProbe {get;private set;}
+ internal Point LastPointerApplied {get;private set;}
  internal int PointerAppliedCount {get;private set;}
  bool controlRequestPending;int qualityMode;
  internal bool Sharing=>capture!=null;
@@ -71,14 +73,14 @@ sealed partial class MainForm : Form {
      else if(data.S("k")=="quality"&&role=="host"&&localVerified&&remoteVerified){Volatile.Write(ref qualityMode,(int)Math.Clamp(data.N("mode"),0,2));}
      else if(data.S("k")=="frame_ack"&&role=="host"){frames?.Acknowledge(data.N("id"));session.Text="Дэлгэц амжилттай хүрсэн · Хуваалцаж байна";}
      else if(data.S("k")=="request_control"&&role=="host"&&!canControl&&localVerified&&remoteVerified&&!controlRequestPending){
-      controlRequestPending=true;using var dialog=new ControlPermissionDialog();bool grant=await ShowInline(dialog)==DialogResult.OK;controlRequestPending=false;
+      controlRequestPending=true;int permissionVersion=generation;using var dialog=new ControlPermissionDialog();bool grant=await ShowInline(dialog)==DialogResult.OK;controlRequestPending=false;if(permissionVersion!=generation)break;
       if(grant&&crypto!=null){canControl=true;await SendProtected(new{k="control_granted"});status.Text="Нөгөө талд гар, хулгана удирдах эрх олголоо.";}else await SendProtected(new{k="control_denied"});
      }
      else if(data.S("k")=="control_granted"&&role=="viewer"){canControl=true;viewer?.SetControl(true);}
      else if(data.S("k")=="control_denied"&&role=="viewer")viewer?.ControlDenied();
      else if(data.S("k")=="input_denied"&&role=="viewer")viewer?.InputDenied();
      else if(data.S("k")=="input"&&role=="host"&&canControl&&localVerified&&remoteVerified){
-      try{input.Apply(data);InputAppliedCount++;if(data.S("action")=="move")PointerAppliedCount++;}catch(Exception error)when(error is InvalidOperationException or System.ComponentModel.Win32Exception){await SendProtected(new{k="input_denied"});status.Text="Windows удирдлагыг зөвшөөрсөнгүй. Өндөр эрхтэй цонх удирдах бол программыг администратороор нээнэ үү.";}
+      try{input.Apply(data);InputAppliedCount++;if(data.S("action")=="move"){PointerAppliedCount++;if(data.N("probe")>0){LastPointerProbe=data.N("probe");LastPointerApplied=Cursor.Position;}}}catch(Exception error)when(error is InvalidOperationException or System.ComponentModel.Win32Exception){await SendProtected(new{k="input_denied"});status.Text="Windows удирдлагыг зөвшөөрсөнгүй. Өндөр эрхтэй цонх удирдах бол программыг администратороор нээнэ үү.";}
      }break;
     case "ended":case "cancelled":consent?.Close();StopSession();status.Text=m.S("message");break;
     case "error":status.Text=m.S("message");if(pending)StopSession();break;
@@ -94,9 +96,9 @@ sealed partial class MainForm : Form {
  }
  public Task SendProtected(object message)=>SendProtectedFor(message,null);
  async Task SendProtectedFor(object message,string? expectedSession){
-  await encryptedSender.WaitAsync();
-  try{if(crypto!=null&&sid!=""&&net?.IsOpen==true&&(expectedSession==null||sid==expectedSession))await net.Send(crypto.Seal(sid,message));}
-  catch(Exception e){UI(()=>{Disconnect();status.Text="Өгөгдөл илгээж чадсангүй. "+ErrorText(e);});}finally{encryptedSender.Release();}
+  int sendVersion=generation;await encryptedSender.WaitAsync();
+  try{if(sendVersion!=generation)return;if(crypto!=null&&sid!=""&&net?.IsOpen==true&&(expectedSession==null||sid==expectedSession))await net.Send(crypto.Seal(sid,message));}
+  catch(Exception e){UI(()=>{if(sendVersion!=generation)return;Disconnect();status.Text="Өгөгдөл илгээж чадсангүй. "+ErrorText(e);});}finally{encryptedSender.Release();}
  }
  static string ErrorText(Exception error){
   if(error is System.Security.Cryptography.CryptographicException)return "Холболтын хамгаалалт тохирсонгүй. Хоёр тал хамгийн шинэ хувилбарыг ашиглана уу.";
@@ -108,7 +110,7 @@ sealed partial class MainForm : Form {
  void StopSession(){
   generation++;controlRequestPending=false;CancelInline();frames=null;heartbeat?.Cancel();heartbeat=null;capture?.Cancel();capture=null;input.Release();sid="";pending=false;localVerified=remoteVerified=false;role="";canControl=false;
   crypto?.Dispose();crypto=null;verify.Enabled=false;end.Enabled=false;request.Enabled=true;session.Text="Холболт нээгдээгүй";Text="RAINY Remote · Бие даасан алсын удирдлага";
-  if(viewer!=null){var old=viewer;viewer=null;old.InternalClose=true;Controls.Remove(old);old.Close();old.Dispose();foreach(Control home in Controls)home.Visible=true;OnResize(EventArgs.Empty);}
+  if(viewer!=null){var old=viewer;viewer=null;old.InternalClose=true;old.RestoreWindow();Controls.Remove(old);old.Close();old.Dispose();foreach(Control home in Controls)home.Visible=true;OnResize(EventArgs.Empty);}
 
  }
 }
