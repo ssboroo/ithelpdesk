@@ -17,6 +17,7 @@ OutputBaseFilename=RainyRemote-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\native\Client\Assets\Brand.ico
 UninstallDisplayIcon={app}\RainyRemote.exe
 CloseApplications=yes
 [Tasks]

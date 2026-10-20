@@ -12,6 +12,8 @@ sealed partial class MainForm : Form {
  internal string PairCode=>myPin.Tag as string??"";
  internal int ReceivedFrames {get;private set;}
  internal int SentFrames;
+ internal int InputAppliedCount {get;private set;}
+ bool controlRequestPending;
  internal bool Sharing=>capture!=null;
  internal bool HasSession=>sid!="";
  internal ViewerForm? Viewer=>viewer;
@@ -38,15 +40,17 @@ sealed partial class MainForm : Form {
     case "waiting":session.Text="Нөгөө талын зөвшөөрлийг хүлээж байна";status.Text=m.S("message");break;
     case "invite":
      if(crypto!=null||pending){await net!.Send(new{t="reject",id=m.S("id")});return;}
-     string requestId=m.S("id");consent=new Form{Text="RAINY Remote · Холболтын зөвшөөрөл",Width=550,Height=270,StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
-     var label=new Label{Text=$"{m.S("from")} төхөөрөмж таны дэлгэцийг харах хүсэлт илгээлээ.\nЗөвшөөрсний дараа хоёр талын баталгаажуулах кодыг харьцуулна.",Dock=DockStyle.Top,Height=85,Padding=new Padding(15),Font=Font};
-     var control=new CheckBox{Text="Хулгана, гар удирдахыг мөн зөвшөөрөх",Dock=DockStyle.Top,Height=45,Padding=new Padding(15),Font=Font};
-     var buttons=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=60,Padding=new Padding(15)};var allow=new Button{Name="AcceptConsent",Text="Зөвшөөрөх",DialogResult=DialogResult.OK,AutoSize=true};var deny=new Button{Text="Татгалзах",DialogResult=DialogResult.Cancel,AutoSize=true};buttons.Controls.Add(allow);buttons.Controls.Add(deny);consent.Controls.Add(control);consent.Controls.Add(label);consent.Controls.Add(buttons);
-     var choice=consent.ShowDialog(this);bool accepted=choice==DialogResult.OK;bool granted=control.Checked;consent.Dispose();consent=null;
+     string requestId=m.S("id");consent=new Form{Icon=Brand.AppIcon,Text="Холбогдох хүсэлт",ClientSize=new Size(560,360),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
+     var body=Ui.Stack(26);body.Controls.Add(Ui.Text("Танд туслах хүсэлт ирлээ",19,true));body.Controls.Add(new Label{Text=$"Төхөөрөмжийн дугаар: {m.S("from")}\nЯмар эрх олгохоо сонгоно уу.",AutoSize=true,ForeColor=Ui.Muted,Margin=new Padding(0,6,0,18)});
+     bool granted=false;
+     var allow=Ui.Button("Гар, хулгана удирдахыг зөвшөөрөх",true);allow.Width=490;allow.Name="AcceptConsent";allow.Click+=(_,_)=>{granted=true;consent.DialogResult=DialogResult.OK;};body.Controls.Add(allow);
+     var viewOnly=Ui.Button("Зөвхөн дэлгэц харахыг зөвшөөрөх");viewOnly.Name="AcceptViewOnly";viewOnly.Width=490;viewOnly.DialogResult=DialogResult.OK;body.Controls.Add(viewOnly);
+     var deny=Ui.Button("Татгалзах");deny.Width=490;deny.DialogResult=DialogResult.Cancel;body.Controls.Add(deny);consent.Controls.Add(body);consent.CancelButton=deny;
+     var choice=consent.ShowDialog(this);bool accepted=choice==DialogResult.OK;consent.Dispose();consent=null;
      if(accepted){crypto=new SessionCrypto();pending=true;end.Enabled=true;request.Enabled=false;await net!.Send(new{t="accept",id=requestId,key=crypto.PublicKey,control=granted});}else await net!.Send(new{t="reject",id=requestId});break;
     case "accepted":
      if(crypto==null){await net!.Send(new{t="end"});return;}
-     ReceivedFrames=0;SentFrames=0;crypto.Agree(m.S("key"));sid=m.S("sid");role=m.S("role");canControl=m.B("control");pending=false;localVerified=remoteVerified=false;end.Enabled=true;
+     ReceivedFrames=0;SentFrames=0;InputAppliedCount=0;crypto.Agree(m.S("key"));sid=m.S("sid");role=m.S("role");canControl=m.B("control");pending=false;localVerified=remoteVerified=false;end.Enabled=true;
      lastPeerPacket=Environment.TickCount64;heartbeat=new CancellationTokenSource();var heartToken=heartbeat.Token;
      _=Task.Run(async()=>{try{while(!heartToken.IsCancellationRequested){await Task.Delay(5000,heartToken);if(Environment.TickCount64-lastPeerPacket>25000){UI(()=>{Disconnect();status.Text="Нөгөө талын хариу тасарсан тул хуваалцахыг зогсоолоо.";});return;}await SendProtected(new{k="alive"});}}catch(OperationCanceledException){}});
      session.Text=$"{m.S("peer")} · Холболтын кодоо баталгаажуулна уу";status.Text="Баталгаажуулах цонхонд кодоо харьцуулж, хоёр тал зөвшөөрнө.";
@@ -61,7 +65,16 @@ sealed partial class MainForm : Form {
      if(data.S("k")=="ready"){remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
      else if(data.S("k")=="frame"&&role=="viewer"&&localVerified&&remoteVerified){viewer?.Frame(Convert.FromBase64String(data.S("jpeg")));ReceivedFrames++;session.Text=$"Дэлгэц дамжиж байна · {ReceivedFrames} зураг хүлээн авлаа";status.Text="Холболт хэвийн. Дуусгахдаа «Холболт салгах» дарна уу.";if(ReceivedFrames==1)await SendProtected(new{k="frame_ack"});}
      else if(data.S("k")=="frame_ack"&&role=="host"){session.Text="Дэлгэц амжилттай хүрсэн · Хуваалцаж байна";}
-     else if(data.S("k")=="input"&&role=="host"&&canControl&&localVerified&&remoteVerified)input.Apply(data);break;
+     else if(data.S("k")=="request_control"&&role=="host"&&!canControl&&localVerified&&remoteVerified&&!controlRequestPending){
+      controlRequestPending=true;using var dialog=new ControlPermissionDialog();bool grant=dialog.ShowDialog(this)==DialogResult.OK;controlRequestPending=false;
+      if(grant&&crypto!=null){canControl=true;await SendProtected(new{k="control_granted"});status.Text="Нөгөө талд гар, хулгана удирдах эрх олголоо.";}else await SendProtected(new{k="control_denied"});
+     }
+     else if(data.S("k")=="control_granted"&&role=="viewer"){canControl=true;viewer?.SetControl(true);}
+     else if(data.S("k")=="control_denied"&&role=="viewer")viewer?.ControlDenied();
+     else if(data.S("k")=="input_denied"&&role=="viewer")viewer?.InputDenied();
+     else if(data.S("k")=="input"&&role=="host"&&canControl&&localVerified&&remoteVerified){
+      try{input.Apply(data);InputAppliedCount++;}catch(Exception error)when(error is InvalidOperationException or System.ComponentModel.Win32Exception){await SendProtected(new{k="input_denied"});status.Text="Windows удирдлагыг зөвшөөрсөнгүй. Өндөр эрхтэй цонх удирдах бол программыг администратороор нээнэ үү.";}
+     }break;
     case "ended":case "cancelled":consent?.Close();StopSession();status.Text=m.S("message");break;
     case "error":status.Text=m.S("message");if(pending)StopSession();break;
    }
@@ -71,7 +84,7 @@ sealed partial class MainForm : Form {
  void MaybeCapture(){
   if(role!="host"||!localVerified||!remoteVerified||capture!=null||crypto==null)return;
   capture=new CancellationTokenSource();var token=capture.Token;Text="● RAINY Remote · ДЭЛГЭЦ ХУВААЛЦАЖ БАЙНА";status.Text=canControl?"Дэлгэц, гар, хулгана хуваалцаж байна. Салгах товчоор хүссэн үедээ зогсооно.":"Дэлгэцийг зөвхөн харах эрхээр хуваалцаж байна.";
-  banner=new Form{Text="Дэлгэц хуваалцаж байна",Width=500,Height=75,TopMost=true,FormBorderStyle=FormBorderStyle.FixedToolWindow,StartPosition=FormStartPosition.Manual,Location=new Point(20,10)};
+  banner=new Form{Icon=Brand.AppIcon,Text="Дэлгэц хуваалцаж байна",Width=500,Height=75,TopMost=true,FormBorderStyle=FormBorderStyle.FixedToolWindow,StartPosition=FormStartPosition.Manual,Location=new Point(20,10)};
   var stopButton=new Button{Text="● RAINY Remote · Хуваалцаж байна — САЛГАХ",Dock=DockStyle.Fill,BackColor=Color.Firebrick,ForeColor=Color.White};stopButton.Click+=(_,_)=>Disconnect();banner.Controls.Add(stopButton);banner.FormClosing+=(_,e)=>{if(!closingBanner){e.Cancel=true;BeginInvoke((Action)(()=>Disconnect()));}};banner.Show();
   _=Task.Run(async()=>{try{while(!token.IsCancellationRequested){byte[] jpeg=Desktop.Capture();await SendProtected(new{k="frame",jpeg=Convert.ToBase64String(jpeg)});Interlocked.Increment(ref SentFrames);await Task.Delay(170,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
  }

@@ -31,19 +31,19 @@ sealed class RemoteInput {
  [DllImport("user32.dll",SetLastError=true)]static extern uint SendInput(uint count,INPUT[] inputs,int size);
  [DllImport("user32.dll")]static extern bool SetCursorPos(int x,int y);
  readonly HashSet<ushort> keys=[];readonly HashSet<int> buttons=[];
- static void Key(ushort key,bool up){var input=new INPUT{type=1,data=new Union{key=new KEY{vk=key,flags=up?2u:0u}}};SendInput(1,[input],Marshal.SizeOf<INPUT>());}
- static void Mouse(uint flags,uint data=0){var input=new INPUT{type=0,data=new Union{mouse=new MOUSE{flags=flags,mouseData=data}}};SendInput(1,[input],Marshal.SizeOf<INPUT>());}
+ static void Key(ushort key,bool up){var input=new INPUT{type=1,data=new Union{key=new KEY{vk=key,flags=up?2u:0u}}};if(SendInput(1,[input],Marshal.SizeOf<INPUT>())!=1)throw new InvalidOperationException("Windows удирдлагыг хориглосон");}
+ static void Mouse(uint flags,uint data=0){var input=new INPUT{type=0,data=new Union{mouse=new MOUSE{flags=flags,mouseData=data}}};if(SendInput(1,[input],Marshal.SizeOf<INPUT>())!=1)throw new InvalidOperationException("Windows удирдлагыг хориглосон");}
  static uint ButtonFlag(int button,bool up)=>button switch{0=>up?4u:2u,1=>up?16u:8u,_=>up?64u:32u};
  public void Apply(JsonElement m){
   switch(m.S("action")){
    case "move":
     double x=m.D("x"),y=m.D("y");if(!double.IsFinite(x)||!double.IsFinite(y)||x<0||x>1||y<0||y>1)return;
-    var bounds=Screen.PrimaryScreen!.Bounds;SetCursorPos(bounds.Left+(int)(x*(bounds.Width-1)),bounds.Top+(int)(y*(bounds.Height-1)));break;
+    var bounds=Screen.PrimaryScreen!.Bounds;if(!SetCursorPos(bounds.Left+(int)(x*(bounds.Width-1)),bounds.Top+(int)(y*(bounds.Height-1))))throw new InvalidOperationException("Windows хулганы удирдлагыг хориглосон");break;
    case "button":int b=(int)m.N("button");if(b<0||b>2)return;bool up=m.B("up");if(up){if(buttons.Remove(b))Mouse(ButtonFlag(b,true));}else if(buttons.Add(b))Mouse(ButtonFlag(b,false));break;
    case "key":long value=m.N("key");if(value<8||value>254)return;ushort vk=(ushort)value;bool released=m.B("up");if(released){if(keys.Remove(vk))Key(vk,true);}else if(keys.Add(vk))Key(vk,false);break;
    case "wheel":int delta=(int)Math.Clamp(m.N("delta"),-1200,1200);Mouse(0x800,unchecked((uint)delta));break;
    case "release":Release();break;
   }
  }
- public void Release(){foreach(var k in keys)Key(k,true);keys.Clear();foreach(var b in buttons)Mouse(ButtonFlag(b,true));buttons.Clear();}
+ public void Release(){foreach(var k in keys)try{Key(k,true);}catch(InvalidOperationException){}keys.Clear();foreach(var b in buttons)try{Mouse(ButtonFlag(b,true));}catch(InvalidOperationException){}buttons.Clear();}
 }

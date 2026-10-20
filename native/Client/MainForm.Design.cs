@@ -2,10 +2,10 @@ namespace RainyRemote;
 sealed partial class MainForm {
  readonly Label connectionBadge=Ui.Text("● Холбогдож байна",10,true,Ui.Accent);
  void InitializeInterface(){
-  Text="RAINY · Алсын тусламж";Name="MainWindow";ClientSize=new Size(1060,730);MinimumSize=new Size(980,710);Font=new Font("Segoe UI",11);BackColor=Ui.Canvas;StartPosition=FormStartPosition.CenterScreen;
+  Icon=Brand.AppIcon;Text="RAINY · Алсын тусламж";Name="MainWindow";ClientSize=new Size(1060,730);MinimumSize=new Size(980,710);Font=new Font("Segoe UI",11);BackColor=Ui.Canvas;StartPosition=FormStartPosition.CenterScreen;
   var nav=new Panel{Dock=DockStyle.Left,Width=190,BackColor=Color.FromArgb(20,43,51),Padding=new Padding(22,28,18,20)};
-  var brand=Ui.Text("RAINY",24,true,Color.White);brand.Dock=DockStyle.Top;brand.Height=55;brand.AutoSize=false;nav.Controls.Add(brand);
-  var side=new Label{Text="АЛСЫН ТУСЛАМЖ\n\n\n↗   Холболт\n\n\nКомпьютер хооронд\nаюулгүй тусламж",ForeColor=Color.FromArgb(181,205,207),Dock=DockStyle.Fill,Padding=new Padding(0,75,0,0),Font=new Font("Segoe UI",10)};nav.Controls.Add(side);brand.BringToFront();
+  var brand=new BrandMark{Location=new Point(22,26)};nav.Controls.Add(brand);
+  var side=new Label{Text="АЛСЫН ТУСЛАМЖ\n\n\n↗   Холболт\n\n\nКомпьютер хооронд\nаюулгүй тусламж",ForeColor=Color.FromArgb(181,205,207),Location=new Point(22,132),Size=new Size(148,250),Font=new Font("Segoe UI",10)};nav.Controls.Add(side);
   var settingsButton=Ui.Button("Тохиргоо");settingsButton.Dock=DockStyle.Bottom;settingsButton.Click+=(_,_)=>OpenSettings();nav.Controls.Add(settingsButton);Controls.Add(nav);
   var layout=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=2,RowCount=4,Padding=new Padding(28,24,28,20),BackColor=Ui.Canvas};layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,50));
   layout.RowStyles.Add(new RowStyle(SizeType.Absolute,90));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,340));layout.RowStyles.Add(new RowStyle(SizeType.Absolute,130));layout.RowStyles.Add(new RowStyle(SizeType.Percent,100));
