@@ -14,7 +14,7 @@ sealed partial class MainForm : Form {
  internal int SentFrames;
  internal int InputAppliedCount {get;private set;}
  internal int PointerAppliedCount {get;private set;}
- bool controlRequestPending;
+ bool controlRequestPending;int qualityMode;
  internal bool Sharing=>capture!=null;
  internal bool HasSession=>sid!="";
  internal ViewerForm? Viewer=>viewer;
@@ -51,7 +51,7 @@ sealed partial class MainForm : Form {
      if(accepted){crypto=new SessionCrypto();pending=true;end.Enabled=true;request.Enabled=false;await net!.Send(new{t="accept",id=requestId,key=crypto.PublicKey,control=granted});}else await net!.Send(new{t="reject",id=requestId});break;
     case "accepted":
      if(crypto==null){await net!.Send(new{t="end"});return;}
-     frames=new FrameFlow();ReceivedFrames=0;SentFrames=0;InputAppliedCount=0;PointerAppliedCount=0;crypto.Agree(m.S("key"));sid=m.S("sid");role=m.S("role");canControl=m.B("control");pending=false;localVerified=remoteVerified=false;end.Enabled=true;
+     qualityMode=0;frames=new FrameFlow();ReceivedFrames=0;SentFrames=0;InputAppliedCount=0;PointerAppliedCount=0;crypto.Agree(m.S("key"));sid=m.S("sid");role=m.S("role");canControl=m.B("control");pending=false;localVerified=remoteVerified=false;end.Enabled=true;
      lastPeerPacket=Environment.TickCount64;heartbeat=new CancellationTokenSource();var heartToken=heartbeat.Token;
      _=Task.Run(async()=>{try{while(!heartToken.IsCancellationRequested){await Task.Delay(5000,heartToken);if(Environment.TickCount64-lastPeerPacket>25000){UI(()=>{Disconnect();status.Text="Нөгөө талын хариу тасарсан тул хуваалцахыг зогсоолоо.";});return;}await SendProtected(new{k="alive"});}}catch(OperationCanceledException){}});
      session.Text=$"{m.S("peer")} · Холболтын кодоо баталгаажуулна уу";status.Text="Доорх кодоо харьцуулж, хоёр тал зөвшөөрнө.";
@@ -65,6 +65,7 @@ sealed partial class MainForm : Form {
      if(crypto==null||m.S("sid")!=sid)return;var data=crypto.Open(sid,m);lastPeerPacket=Environment.TickCount64;
      if(data.S("k")=="ready"){remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
      else if(data.S("k")=="frame"&&role=="viewer"&&localVerified&&remoteVerified){if(viewer==null)return;var activeViewer=viewer;int version=generation;await activeViewer.FrameAsync(Convert.FromBase64String(data.S("jpeg")));if(version!=generation||viewer!=activeViewer)return;ReceivedFrames++;session.Text=$"Дэлгэц дамжиж байна · {ReceivedFrames} зураг хүлээн авлаа";status.Text="Холболт хэвийн. Дуусгахдаа «Холболт салгах» дарна уу.";await SendProtected(new{k="frame_ack",id=data.N("id")});}
+     else if(data.S("k")=="quality"&&role=="host"&&localVerified&&remoteVerified){Volatile.Write(ref qualityMode,(int)Math.Clamp(data.N("mode"),0,2));}
      else if(data.S("k")=="frame_ack"&&role=="host"){frames?.Acknowledge(data.N("id"));session.Text="Дэлгэц амжилттай хүрсэн · Хуваалцаж байна";}
      else if(data.S("k")=="request_control"&&role=="host"&&!canControl&&localVerified&&remoteVerified&&!controlRequestPending){
       controlRequestPending=true;using var dialog=new ControlPermissionDialog();bool grant=await ShowInline(dialog)==DialogResult.OK;controlRequestPending=false;
@@ -86,7 +87,7 @@ sealed partial class MainForm : Form {
   if(role!="host"||!localVerified||!remoteVerified||capture!=null||crypto==null)return;
   capture=new CancellationTokenSource();var token=capture.Token;Text="● RAINY Remote · ДЭЛГЭЦ ХУВААЛЦАЖ БАЙНА";status.Text=canControl?"Дэлгэц, гар, хулгана хуваалцаж байна. Салгах товчоор хүссэн үедээ зогсооно.":"Дэлгэцийг зөвхөн харах эрхээр хуваалцаж байна.";
   var flow=frames!;int version=generation;string activeSid=sid;
-  _=Task.Run(async()=>{try{using var grabber=new CaptureSession();while(!token.IsCancellationRequested){long started=Environment.TickCount64;byte[]? jpeg=grabber.Next(flow.RoundTripMs);if(jpeg is not null){long id=flow.Begin();await SendProtectedFor(new{k="frame",id,jpeg=Convert.ToBase64String(jpeg)},activeSid);Interlocked.Increment(ref SentFrames);await flow.Wait(token);}int pause=(int)Math.Max(1,50-(Environment.TickCount64-started));await Task.Delay(pause,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{if(version!=generation)return;Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
+  _=Task.Run(async()=>{try{using var grabber=new CaptureSession();while(!token.IsCancellationRequested){long started=Environment.TickCount64;byte[]? jpeg=grabber.Next(flow.RoundTripMs,Volatile.Read(ref qualityMode));if(jpeg is not null){long id=flow.Begin();await SendProtectedFor(new{k="frame",id,jpeg=Convert.ToBase64String(jpeg)},activeSid);Interlocked.Increment(ref SentFrames);await flow.Wait(token);}int pause=(int)Math.Max(1,50-(Environment.TickCount64-started));await Task.Delay(pause,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{if(version!=generation)return;Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
  }
  public Task SendProtected(object message)=>SendProtectedFor(message,null);
  async Task SendProtectedFor(object message,string? expectedSession){
