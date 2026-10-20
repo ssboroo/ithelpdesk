@@ -68,7 +68,7 @@ sealed partial class MainForm : Form {
      break;
     case "data":
      if(crypto==null||m.S("sid")!=sid)return;var data=crypto.Open(sid,m);lastPeerPacket=Environment.TickCount64;
-     if(data.S("k")=="ready"){if(data.N("protocol")!=5){Disconnect();status.Text="Хоёр компьютер дээр ижил шинэ хувилбар суулгана уу. Нөгөө талын дамжуулалтын хувилбар хуучин байна.";return;}remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
+     if(data.S("k")=="ready"){if(data.N("protocol")!=6){Disconnect();status.Text="Хоёр компьютер дээр ижил шинэ хувилбар суулгана уу. Нөгөө талын дамжуулалтын хувилбар хуучин байна.";return;}remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
      else if(data.S("k")=="frame"&&role=="viewer"&&localVerified&&remoteVerified){if(viewer==null)return;var activeViewer=viewer;int version=generation;await activeViewer.FrameAsync(data);if(version!=generation||viewer!=activeViewer)return;ReceivedFrames++;session.Text=$"Дэлгэц дамжиж байна · {ReceivedFrames} зураг хүлээн авлаа";status.Text="Холболт хэвийн. Дуусгахдаа «Холболт салгах» дарна уу.";await SendProtected(new{k="frame_ack",id=data.N("id")});}
      else if(data.S("k")=="quality"&&role=="host"&&localVerified&&remoteVerified){Volatile.Write(ref qualityMode,(int)Math.Clamp(data.N("mode"),0,2));}
      else if(data.S("k")=="frame_ack"&&role=="host"){frames?.Acknowledge(data.N("id"));session.Text="Дэлгэц амжилттай хүрсэн · Хуваалцаж байна";}
@@ -87,12 +87,12 @@ sealed partial class MainForm : Form {
    }
   }catch(Exception e){Disconnect();status.Text="Холболт зогслоо. "+ErrorText(e);}
  }
- async Task Verify(){localVerified=true;verify.Enabled=false;viewer?.MarkVerified();session.Text=remoteVerified?"Дэлгэц дамжуулалтыг эхлүүлж байна":"Нөгөө тал кодоо баталгаажуулахыг хүлээж байна";await SendProtected(new{k="ready",protocol=5});MaybeCapture();}
+ async Task Verify(){localVerified=true;verify.Enabled=false;viewer?.MarkVerified();session.Text=remoteVerified?"Дэлгэц дамжуулалтыг эхлүүлж байна":"Нөгөө тал кодоо баталгаажуулахыг хүлээж байна";await SendProtected(new{k="ready",protocol=6});MaybeCapture();}
  void MaybeCapture(){
   if(role!="host"||!localVerified||!remoteVerified||capture!=null||crypto==null)return;
   capture=new CancellationTokenSource();var token=capture.Token;Text="● RAINY Remote · ДЭЛГЭЦ ХУВААЛЦАЖ БАЙНА";status.Text=canControl?"Дэлгэц, гар, хулгана хуваалцаж байна. Салгах товчоор хүссэн үедээ зогсооно.":"Дэлгэцийг зөвхөн харах эрхээр хуваалцаж байна.";
   var flow=frames!;int version=generation;string activeSid=sid;
-  _=Task.Run(async()=>{try{using var grabber=new CaptureSession();while(!token.IsCancellationRequested){long started=Environment.TickCount64;FrameUpdate? update=grabber.Next(flow.RoundTripMs,Volatile.Read(ref qualityMode));if(update is not null){long id=flow.Begin();await SendProtectedFor(update.Packet(id),activeSid);Interlocked.Increment(ref SentFrames);await flow.Wait(token);}int pause=(int)Math.Max(1,50-(Environment.TickCount64-started));await Task.Delay(pause,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{if(version!=generation)return;Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
+  _=Task.Run(async()=>{try{using var grabber=new CaptureSession();while(!token.IsCancellationRequested){long started=Environment.TickCount64;long id=await flow.Reserve(token);FrameUpdate? update=grabber.Next(flow.RoundTripMs,Volatile.Read(ref qualityMode));if(token.IsCancellationRequested){flow.Skip(id);break;}if(update is not null){await SendProtectedFor(update.Packet(id),activeSid);Interlocked.Increment(ref SentFrames);}else flow.Skip(id);int pause=(int)Math.Max(1,50-(Environment.TickCount64-started));await Task.Delay(pause,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{if(version!=generation)return;Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
  }
  public Task SendProtected(object message)=>SendProtectedFor(message,null);
  async Task SendProtectedFor(object message,string? expectedSession){

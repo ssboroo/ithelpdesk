@@ -6,7 +6,7 @@ sealed class RemoteScreen : PictureBox {
 }
 sealed class ViewerForm : Form {
  readonly RemoteScreen screen=new(){Dock=DockStyle.Fill,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.FromArgb(13,22,35),TabStop=true};
- readonly FrameRenderer renderer=new();bool resourcesDisposed;Form? expandedWindow;Rectangle normalBounds;FormWindowState normalState;
+ readonly FrameRenderer renderer=new();readonly SemaphoreSlim renderOrder=new(1,1);bool resourcesDisposed;Form? expandedWindow;Rectangle normalBounds;FormWindowState normalState;
  readonly Func<object,Task> send;readonly Action stop;bool verified,control;Point? pendingPointer;readonly System.Windows.Forms.Timer pointerTimer=new(){Interval=25};bool sendingPointer;public bool InternalClose;
  readonly Label waiting=new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(189,207,218),Font=new Font("Segoe UI",16),BackColor=Color.FromArgb(17,33,43)};
  readonly Label frameStatus=new(){Dock=DockStyle.Bottom,Height=32,ForeColor=Ui.Muted,BackColor=Color.White,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(16,0,0,0)};
@@ -70,7 +70,10 @@ sealed class ViewerForm : Form {
   using var stream=new MemoryStream(jpeg);using var image=Image.FromStream(stream);
   if(image.Width>1920||image.Height>1080||image.Width<1||image.Height<1)throw new InvalidDataException("Дүрсний хэмжээ буруу");return new Bitmap(image);
  }
- public async Task FrameAsync(JsonElement packet){var bitmap=await Task.Run(()=>renderer.Apply(packet));if(IsDisposed||Disposing){bitmap.Dispose();return;}Display(bitmap);}
+ public async Task FrameAsync(JsonElement packet){
+  if(resourcesDisposed||IsDisposed)return;await renderOrder.WaitAsync();
+  try{if(resourcesDisposed||IsDisposed)return;Bitmap bitmap;try{bitmap=await Task.Run(()=>renderer.Apply(packet));}catch(ObjectDisposedException)when(resourcesDisposed||IsDisposed){return;}if(resourcesDisposed||IsDisposed||Disposing){bitmap.Dispose();return;}Display(bitmap);}finally{renderOrder.Release();}
+ }
  public void Frame(byte[] jpeg)=>Display(Decode(jpeg));
  void Display(Bitmap bitmap){var old=screen.Image;screen.Image=bitmap;old?.Dispose();frameCount++;waiting.Visible=false;frameStatus.Text=$"● Шууд дамжуулалт   ·   {bitmap.Width} × {bitmap.Height}   ·   Сүлжээнд автоматаар тохируулна";}
 }

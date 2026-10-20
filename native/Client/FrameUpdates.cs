@@ -37,8 +37,9 @@ sealed class FrameEncoder:IDisposable {
 }
 // The worker owns the composition surface; the UI receives an independent display bitmap.
 sealed class FrameRenderer:IDisposable {
- readonly object gate=new();Bitmap? canvas;
+ readonly object gate=new();Bitmap? canvas;bool disposed;
  public Bitmap Apply(JsonElement packet){lock(gate){
+  ObjectDisposedException.ThrowIf(disposed,this);
   string jpeg=packet.S("jpeg");
   if(jpeg!=""){using var bytes=new MemoryStream(Convert.FromBase64String(jpeg));using var image=Image.FromStream(bytes);if(image.Width>1920||image.Height>1080||image.Width<1||image.Height<1)throw new InvalidDataException("Дүрсний хэмжээ буруу");var next=new Bitmap(image);canvas?.Dispose();canvas=next;}
   else{
@@ -50,5 +51,5 @@ sealed class FrameRenderer:IDisposable {
   }
   return new Bitmap(canvas);
  }}
- public void Dispose(){lock(gate){canvas?.Dispose();canvas=null;}}
+ public void Dispose(){lock(gate){disposed=true;canvas?.Dispose();canvas=null;}}
 }

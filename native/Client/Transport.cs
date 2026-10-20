@@ -12,7 +12,8 @@ static class J {
 sealed class Transport : IDisposable {
  readonly ClientWebSocket socket=new();readonly SemaphoreSlim sender=new(1,1);readonly CancellationTokenSource stop=new();
  public event Action<JsonElement>? Message;public event Action<string>? Closed;
- public bool IsOpen=>socket.State==WebSocketState.Open;
+ int disposed;
+ public bool IsOpen=>Volatile.Read(ref disposed)==0&&socket.State==WebSocketState.Open;
  public async Task Connect(string url){
   var uri=new Uri(url);if(uri.Scheme!="wss"&&!(uri.Scheme=="ws"&&uri.IsLoopback))throw new ArgumentException("Сервер wss:// хаягтай байна");
   socket.Options.KeepAliveInterval=TimeSpan.FromSeconds(20);
@@ -39,28 +40,31 @@ sealed class Transport : IDisposable {
     }while(!result.EndOfMessage);
     using var doc=JsonDocument.Parse(message.ToArray());Message?.Invoke(doc.RootElement.Clone());
    }
-  }catch(Exception e)when(e is WebSocketException or IOException or JsonException or OperationCanceledException){reason=e is OperationCanceledException?"Холболт хаагдлаа":"Сүлжээний холболт тасарлаа";}
+  }catch(Exception e)when(e is WebSocketException or IOException or JsonException or OperationCanceledException or ObjectDisposedException){reason=e is OperationCanceledException?"Холболт хаагдлаа":"Сүлжээний холболт тасарлаа";}
   finally{Closed?.Invoke(reason);}
  }
- public void Dispose(){stop.Cancel();socket.Abort();socket.Dispose();}
+ public void Dispose(){if(Interlocked.Exchange(ref disposed,1)!=0)return;stop.Cancel();socket.Abort();socket.Dispose();}
 }
 sealed class SessionCrypto : IDisposable {
+ readonly object gate=new();bool disposed;
  readonly ECDiffieHellman exchange=ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
  byte[]? key;long sent,last;
- public string PublicKey=>Convert.ToBase64String(exchange.ExportSubjectPublicKeyInfo());
- public string Fingerprint=>key==null?"":Convert.ToHexString(SHA256.HashData(key))[..16];
- public void Agree(string peer){using var remote=ECDiffieHellman.Create();remote.ImportSubjectPublicKeyInfo(Convert.FromBase64String(peer),out _);key=exchange.DeriveKeyFromHash(remote.PublicKey,HashAlgorithmName.SHA256);sent=last=0;}
- public object Seal(string sid,object value){
+ public string PublicKey{get{lock(gate){ObjectDisposedException.ThrowIf(disposed,this);return Convert.ToBase64String(exchange.ExportSubjectPublicKeyInfo());}}}
+ public string Fingerprint{get{lock(gate)return key==null?"":Convert.ToHexString(SHA256.HashData(key))[..16];}}
+ public void Agree(string peer){lock(gate){ObjectDisposedException.ThrowIf(disposed,this);using var remote=ECDiffieHellman.Create();remote.ImportSubjectPublicKeyInfo(Convert.FromBase64String(peer),out _);key=exchange.DeriveKeyFromHash(remote.PublicKey,HashAlgorithmName.SHA256);sent=last=0;}}
+ public object Seal(string sid,object value){lock(gate){
+  ObjectDisposedException.ThrowIf(disposed,this);
   if(key==null)throw new InvalidOperationException("Түлхүүр бэлэн биш");
   long n=Interlocked.Increment(ref sent);byte[] plain=JsonSerializer.SerializeToUtf8Bytes(value),iv=RandomNumberGenerator.GetBytes(12),tag=new byte[16],cipher=new byte[plain.Length];
   using var aes=new AesGcm(key,16);aes.Encrypt(iv,plain,cipher,tag,Encoding.UTF8.GetBytes(sid+":"+n));
   return new{t="data",sid,n,iv=Convert.ToBase64String(iv),tag=Convert.ToBase64String(tag),body=Convert.ToBase64String(cipher)};
- }
- public JsonElement Open(string sid,JsonElement envelope){
+ }}
+ public JsonElement Open(string sid,JsonElement envelope){lock(gate){
+  ObjectDisposedException.ThrowIf(disposed,this);
   if(key==null||envelope.S("sid")!=sid||envelope.N("n")<=last)throw new CryptographicException("Хуучин эсвэл өөр холболтын багц");
   long n=envelope.N("n");byte[] cipher=Convert.FromBase64String(envelope.S("body")),plain=new byte[cipher.Length];
   using var aes=new AesGcm(key,16);aes.Decrypt(Convert.FromBase64String(envelope.S("iv")),cipher,Convert.FromBase64String(envelope.S("tag")),plain,Encoding.UTF8.GetBytes(sid+":"+n));
   using var doc=JsonDocument.Parse(plain);last=n;return doc.RootElement.Clone();
- }
- public void Dispose(){if(key!=null)CryptographicOperations.ZeroMemory(key);exchange.Dispose();}
+ }}
+ public void Dispose(){lock(gate){if(disposed)return;disposed=true;if(key!=null)CryptographicOperations.ZeroMemory(key);key=null;exchange.Dispose();}}
 }
