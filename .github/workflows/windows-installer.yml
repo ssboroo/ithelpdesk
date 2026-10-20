@@ -71,6 +71,11 @@ jobs:
           Start-Sleep -Seconds 8
           $portable.Refresh()
           if ($portable.HasExited) { throw 'Portable application exited' }
+          $duplicate=Start-Process 'release/RainyRemote-Portable.exe' -PassThru
+          if (!$duplicate.WaitForExit(15000)) { Stop-Process -Id $duplicate.Id; throw 'Duplicate application window remained open' }
+          if ($duplicate.ExitCode -ne 0) { throw 'Single instance activation failed' }
+          $portable.Refresh()
+          if ($portable.HasExited) { throw 'Original window closed during duplicate activation' }
           Stop-Process -Id $portable.Id
       - name: Checksums
         shell: pwsh
