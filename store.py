@@ -1,5 +1,6 @@
 """Persistent helpdesk domain. Standard-library only; all SQL values parameterized."""
 import sqlite3
+from contextlib import closing
 from datetime import date, datetime
 from pathlib import Path
 
@@ -124,6 +125,6 @@ class Store:
 
     def backup(self, destination):
         if Path(destination).resolve()==self.path.resolve(): raise ValueError('Өөр файл сонгоно уу')
-        with sqlite3.connect(destination) as target: self.conn.backup(target)
+        with closing(sqlite3.connect(destination)) as target: self.conn.backup(target)
 
     def close(self): self.conn.close()
