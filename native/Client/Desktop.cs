@@ -1,6 +1,7 @@
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Security.Cryptography;
 namespace RainyRemote;
 static class Desktop {
  public const int FrameBudget=450000;
@@ -22,6 +23,26 @@ static class Desktop {
   throw new InvalidOperationException("Дэлгэцийн зургийг бэлтгэж чадсангүй.");
  }
 
+}
+// Reuse the full-size capture surface; unchanged frames need no JPEG or network packet.
+sealed class CaptureSession : IDisposable {
+ Bitmap? surface; Graphics? graphics; byte[] pixels=[]; byte[]? previous; long lastSent;
+ internal byte[]? EncodeChanged(Bitmap image,long now){
+  var area=new Rectangle(0,0,image.Width,image.Height);
+  var data=image.LockBits(area,ImageLockMode.ReadOnly,PixelFormat.Format24bppRgb);
+  byte[] digest;
+  try{int size=Math.Abs(data.Stride)*image.Height;if(pixels.Length!=size)pixels=new byte[size];Marshal.Copy(data.Scan0,pixels,0,size);digest=SHA256.HashData(pixels);}
+  finally{image.UnlockBits(data);}
+  if(previous is not null&&digest.AsSpan().SequenceEqual(previous)&&now-lastSent<2000)return null;
+  var encoded=Desktop.Encode(image);previous=digest;lastSent=now;return encoded;
+ }
+ public byte[]? Next(){
+  var bounds=Screen.PrimaryScreen?.Bounds??throw new InvalidOperationException("Дэлгэц олдсонгүй.");
+  if(surface is null||surface.Size!=bounds.Size){Dispose();surface=new Bitmap(bounds.Width,bounds.Height,PixelFormat.Format24bppRgb);graphics=Graphics.FromImage(surface);previous=null;}
+  graphics!.CopyFromScreen(bounds.Location,Point.Empty,bounds.Size);
+  return EncodeChanged(surface,Environment.TickCount64);
+ }
+ public void Dispose(){graphics?.Dispose();surface?.Dispose();graphics=null;surface=null;}
 }
 sealed class RemoteInput {
  [StructLayout(LayoutKind.Sequential)]struct INPUT{public uint type;public Union data;}

@@ -16,6 +16,10 @@ static class SelfTest {
    byte[] jpeg=Desktop.Capture();using(var stream=new MemoryStream(jpeg))using(var image=Image.FromStream(stream)){Assert(image.Width<=1280&&image.Height<=720,"Capture dimensions");}results.Add("Native Windows screen capture passed");
    using(var viewer=new ViewerForm("test","12345678",false,_=>Task.CompletedTask,()=>{},()=>{})){viewer.Frame(jpeg);Assert(viewer.Controls.Count>0,"Viewer UI");}results.Add("Native viewer JPEG rendering passed");
    using(var noise=new Bitmap(1920,1080)){var random=new Random(7);for(int y=0;y<noise.Height;y++)for(int x=0;x<noise.Width;x++)noise.SetPixel(x,y,Color.FromArgb(random.Next(256),random.Next(256),random.Next(256)));Assert(Desktop.Encode(noise).Length<=Desktop.FrameBudget,"Adaptive frame budget");}results.Add("High-entropy 1080p capture stays inside relay packet budget");
+   using(var still=new Bitmap(320,180,System.Drawing.Imaging.PixelFormat.Format24bppRgb))using(var capture=new CaptureSession()){
+    Assert(capture.EncodeChanged(still,0) is not null,"First frame missing");Assert(capture.EncodeChanged(still,83) is null,"Static frame sent twice");
+    still.SetPixel(1,1,Color.Red);Assert(capture.EncodeChanged(still,166) is not null,"Small screen change missed");Assert(capture.EncodeChanged(still,2200) is not null,"Refresh frame missing");
+   }results.Add("Static frame suppression, single-pixel change and periodic refresh passed");
    TestInput();results.Add("Native Windows keyboard injection and release passed");
    Task.Run(()=>RoundTrip(jpeg)).GetAwaiter().GetResult();results.Add("Two native clients: live relay pairing, encrypted screen frame, encrypted input and disconnect passed");
    GuiRegression.Run();results.Add("Two GUI clients: real consent, matching verification dialogs, at least 3 displayed frames, read-only input denial, explicit control grant, actual relayed host cursor movement and disconnect passed");

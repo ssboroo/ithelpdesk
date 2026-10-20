@@ -86,7 +86,7 @@ sealed partial class MainForm : Form {
   capture=new CancellationTokenSource();var token=capture.Token;Text="● RAINY Remote · ДЭЛГЭЦ ХУВААЛЦАЖ БАЙНА";status.Text=canControl?"Дэлгэц, гар, хулгана хуваалцаж байна. Салгах товчоор хүссэн үедээ зогсооно.":"Дэлгэцийг зөвхөн харах эрхээр хуваалцаж байна.";
   banner=new Form{Icon=Brand.AppIcon,Text="Дэлгэц хуваалцаж байна",Width=500,Height=75,TopMost=true,FormBorderStyle=FormBorderStyle.FixedToolWindow,StartPosition=FormStartPosition.Manual,Location=new Point(20,10)};
   var stopButton=new Button{Text="● RAINY Remote · Хуваалцаж байна — САЛГАХ",Dock=DockStyle.Fill,BackColor=Color.Firebrick,ForeColor=Color.White};stopButton.Click+=(_,_)=>Disconnect();banner.Controls.Add(stopButton);banner.FormClosing+=(_,e)=>{if(!closingBanner){e.Cancel=true;BeginInvoke((Action)(()=>Disconnect()));}};banner.Show();
-  _=Task.Run(async()=>{try{while(!token.IsCancellationRequested){byte[] jpeg=Desktop.Capture();await SendProtected(new{k="frame",jpeg=Convert.ToBase64String(jpeg)});Interlocked.Increment(ref SentFrames);await Task.Delay(170,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
+  _=Task.Run(async()=>{try{using var capture=new CaptureSession();while(!token.IsCancellationRequested){byte[]? jpeg=capture.Next();if(jpeg is not null){await SendProtected(new{k="frame",jpeg=Convert.ToBase64String(jpeg)});Interlocked.Increment(ref SentFrames);}await Task.Delay(83,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
  }
  public async Task SendProtected(object message){
   await encryptedSender.WaitAsync();
