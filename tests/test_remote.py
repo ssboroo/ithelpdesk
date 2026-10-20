@@ -14,7 +14,7 @@ class EngineTests(unittest.TestCase):
         self.temp=tempfile.TemporaryDirectory(); self.root=Path(self.temp.name);self.engine=RemoteEngine(self.root)
     def tearDown(self): self.temp.cleanup()
     def fake_executable(self):
-        path=self.root/'RustDesk.exe';path.write_bytes(b'MZfake');self.engine.choose(path);return path
+        path=self.root/'RustDesk.exe';path.write_bytes(b'MZfake');self.engine.choose(path);return path.resolve()
     def test_peer_validation_blocks_arguments_and_urls(self):
         self.assertEqual(normalize_peer('123 456-789'),'123456789')
         for value in ('--connect','123456 --password abc','rustdesk://123456','1.2.3.4','１２３４５６','123\n456','12345','1'*17):
