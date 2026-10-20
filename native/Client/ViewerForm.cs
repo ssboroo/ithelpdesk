@@ -6,7 +6,7 @@ sealed class RemoteScreen : PictureBox {
 }
 sealed class ViewerForm : Form {
  readonly RemoteScreen screen=new(){Dock=DockStyle.Fill,SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.FromArgb(13,22,35),TabStop=true};
- readonly Func<object,Task> send;readonly Action stop;bool verified,control;long moved;public bool InternalClose;
+ readonly Func<object,Task> send;readonly Action stop;bool verified,control;Point? pendingPointer;readonly System.Windows.Forms.Timer pointerTimer=new(){Interval=25};bool sendingPointer;public bool InternalClose;
  readonly Label waiting=new(){Dock=DockStyle.Fill,TextAlign=ContentAlignment.MiddleCenter,ForeColor=Color.FromArgb(189,207,218),Font=new Font("Segoe UI",16),BackColor=Color.FromArgb(17,33,43)};
  readonly Label frameStatus=new(){Dock=DockStyle.Bottom,Height=32,ForeColor=Ui.Muted,BackColor=Color.White,TextAlign=ContentAlignment.MiddleLeft,Padding=new Padding(16,0,0,0)};
  readonly Label modeLabel=Ui.Text("",10,false,Ui.Muted);readonly Button controlButton=Ui.Button("Удирдах эрх хүсэх");
@@ -16,38 +16,39 @@ sealed class ViewerForm : Form {
   Icon=Brand.AppIcon;Text="Алсын дэлгэц · "+peer;Width=1180;Height=800;MinimumSize=new Size(900,620);KeyPreview=true;Font=new Font("Segoe UI",10);
   var bar=new Panel{Dock=DockStyle.Top,Height=108,BackColor=Color.White,Padding=new Padding(18,12,18,10)};
   var heading=Ui.Text("Алсын дэлгэц   /   "+peer,16,true);heading.Location=new Point(18,12);bar.Controls.Add(heading);
-  var details=modeLabel;details.Text=control?"Гар, хулгана удирдах эрхтэй":"Зөвхөн дэлгэц харах эрхтэй";details.AutoSize=false;details.Size=new Size(230,40);details.Location=new Point(18,60);bar.Controls.Add(details);
-  var actions=new FlowLayoutPanel{Location=new Point(500,44),Height=54,Width=600,Anchor=AnchorStyles.Top|AnchorStyles.Right,FlowDirection=FlowDirection.RightToLeft,WrapContents=false,BackColor=Color.White};
+  var details=modeLabel;details.Text=control?"Гар, хулгана удирдах эрхтэй":"Зөвхөн дэлгэц харах эрхтэй";details.AutoSize=false;details.Size=new Size(230,40);details.Location=new Point(330,14);bar.Controls.Add(details);
+  var actions=new FlowLayoutPanel{Dock=DockStyle.Bottom,Height=52,FlowDirection=FlowDirection.LeftToRight,WrapContents=false,BackColor=Color.White};
   var disconnect=Ui.Button("Холболт салгах");disconnect.Name="StopViewer";disconnect.Width=170;disconnect.Click+=(_,_)=>stop();actions.Controls.Add(disconnect);
-  var full=Ui.Button("Бүтэн дэлгэц");full.Width=155;full.Click+=(_,_)=>{bool expand=FormBorderStyle!=FormBorderStyle.None;FormBorderStyle=expand?FormBorderStyle.None:FormBorderStyle.Sizable;WindowState=expand?FormWindowState.Maximized:FormWindowState.Normal;full.Text=expand?"Цонхонд буцаах":"Бүтэн дэлгэц";};actions.Controls.Add(full);
-  confirm.Width=190;confirm.Click+=(_,_)=>verify();actions.Controls.Add(confirm);
-  controlButton.Name="RequestControl";controlButton.Width=220;controlButton.Enabled=!control;controlButton.Text=control?"Удирдах эрх идэвхтэй":"Удирдах эрх хүсэх";controlButton.Click+=async(_,_)=>{controlButton.Enabled=false;modeLabel.Text="Эзэмшигчийн зөвшөөрлийг хүлээж байна";await send(new{k="request_control"});};bar.Controls.Add(actions);
+  var full=Ui.Button("Бүтэн дэлгэц");full.Width=155;full.Click+=(_,_)=>{var window=TopLevel?this:(Form)Parent!;bool expand=window.FormBorderStyle!=FormBorderStyle.None;window.FormBorderStyle=expand?FormBorderStyle.None:FormBorderStyle.Sizable;window.WindowState=expand?FormWindowState.Maximized:FormWindowState.Normal;full.Text=expand?"Цонхонд буцаах":"Бүтэн дэлгэц";};actions.Controls.Add(full);
+  confirm.Width=190;confirm.Click+=(_,_)=>verify();
+  controlButton.Name="RequestControl";controlButton.Width=220;controlButton.Enabled=!control;controlButton.Text=control?"Удирдах эрх идэвхтэй":"Удирдах эрх хүсэх";controlButton.Click+=async(_,_)=>{controlButton.Enabled=false;modeLabel.Text="Эзэмшигчийн зөвшөөрлийг хүлээж байна";await send(new{k="request_control"});};actions.Controls.Add(controlButton);bar.Controls.Add(actions);
   var content=new Panel{Dock=DockStyle.Fill,BackColor=screen.BackColor};content.Controls.Add(screen);content.Controls.Add(waiting);waiting.BringToFront();
   var root=new TableLayoutPanel{Dock=DockStyle.Fill,ColumnCount=1,RowCount=3,Margin=Padding.Empty,Padding=Padding.Empty};root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,108));root.RowStyles.Add(new RowStyle(SizeType.Percent,100));root.RowStyles.Add(new RowStyle(SizeType.Absolute,32));
   bar.Margin=Padding.Empty;content.Margin=Padding.Empty;frameStatus.Margin=Padding.Empty;root.Controls.Add(bar,0,0);root.Controls.Add(content,0,1);root.Controls.Add(frameStatus,0,2);Controls.Add(root);
-  bar.Controls.Add(controlButton);controlButton.Location=new Point(700,0);controlButton.Anchor=AnchorStyles.Top|AnchorStyles.Right;bar.Resize+=(_,_)=>{actions.Left=Math.Max(260,bar.ClientSize.Width-610);controlButton.Left=bar.ClientSize.Width-240;};
   UpdateWaiting();waitingTimer.Tick+=(_,_)=>UpdateWaiting();waitingTimer.Start();
-  screen.MouseMove+=async(_,e)=>{if(!verified||!control||Environment.TickCount64-moved<35)return;moved=Environment.TickCount64;if(Position(e.Location,out var x,out var y))await send(new{k="input",action="move",x,y});};
-  screen.MouseDown+=async(_,e)=>{if(!verified||!control||!Position(e.Location,out var x,out var y))return;screen.Focus();await send(new{k="input",action="move",x,y});await send(new{k="input",action="button",button=ButtonIndex(e.Button),up=false});};
+  // Keep the latest pointer position instead of queuing every MouseMove event.
+  pointerTimer.Tick+=async(_,_)=>{if(sendingPointer||pendingPointer is not Point point||!verified||!control)return;pendingPointer=null;if(!Position(point,out var x,out var y))return;sendingPointer=true;try{await send(new{k="input",action="move",x,y});}finally{sendingPointer=false;}};pointerTimer.Start();
+  screen.MouseMove+=(_,e)=>{if(verified&&control)pendingPointer=e.Location;};
+  screen.MouseDown+=async(_,e)=>{if(!verified||!control||!Position(e.Location,out var x,out var y))return;screen.Focus();pendingPointer=null;await send(new{k="input",action="move",x,y});await send(new{k="input",action="button",button=ButtonIndex(e.Button),up=false});};
   screen.MouseUp+=async(_,e)=>{if(verified&&control)await send(new{k="input",action="button",button=ButtonIndex(e.Button),up=true});};
   screen.MouseWheel+=async(_,e)=>{if(verified&&control)await send(new{k="input",action="wheel",delta=e.Delta});};
-  KeyDown+=async(_,e)=>{if(!verified||!control||!screen.Focused)return;e.Handled=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=false});};
-  KeyUp+=async(_,e)=>{if(!verified||!control||!screen.Focused)return;e.Handled=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=true});};
-  screen.LostFocus+=async(_,_)=>{if(verified&&control)await send(new{k="input",action="release"});};
+  screen.KeyDown+=async(_,e)=>{if(!verified||!control||!screen.Focused)return;e.Handled=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=false});};
+  screen.KeyUp+=async(_,e)=>{if(!verified||!control||!screen.Focused)return;e.Handled=true;await send(new{k="input",action="key",key=(int)e.KeyCode,up=true});};
+  screen.LostFocus+=async(_,_)=>{pendingPointer=null;if(verified&&control)await send(new{k="input",action="release"});};
   Deactivate+=async(_,_)=>{if(verified&&control)await send(new{k="input",action="release"});};
   FormClosing+=(_,e)=>{if(!InternalClose){e.Cancel=true;BeginInvoke((Action)(()=>stop()));}};
-  FormClosed+=(_,_)=>{waitingTimer.Stop();waitingTimer.Dispose();screen.Image?.Dispose();screen.Image=null;};
+  FormClosed+=(_,_)=>{pointerTimer.Stop();pointerTimer.Dispose();waitingTimer.Stop();waitingTimer.Dispose();screen.Image?.Dispose();screen.Image=null;};
  }
  public void SetControl(bool granted){control=granted;controlButton.Enabled=!granted;controlButton.Text=granted?"Удирдах эрх идэвхтэй":"Удирдах эрх хүсэх";modeLabel.Text=granted?"Гар, хулгана удирдах эрхтэй":"Зөвхөн дэлгэц харах эрхтэй";if(granted)screen.Focus();}
  public void ControlDenied(){controlButton.Enabled=true;modeLabel.Text="Эзэмшигч зөвхөн харах эрхийг үлдээлээ.";}
  internal bool ControlAllowed=>control;
- public void InputDenied(){if(!control)return;control=false;controlButton.Enabled=false;controlButton.Text="Дахин холбогдоно уу";modeLabel.Text="Windows удирдлагыг хориглосон";MessageBox.Show(this,"Нөгөө компьютер дээр Windows удирдлагыг хориглолоо. Өндөр эрхтэй программ удирдах бол эзэмшигч RAINY-г администратороор нээгээд дахин холбогдоно уу.","Удирдлагын эрх хүрэлцсэнгүй",MessageBoxButtons.OK,MessageBoxIcon.Information);}
+ public void InputDenied(){if(!control)return;control=false;controlButton.Enabled=false;controlButton.Text="Дахин холбогдоно уу";modeLabel.Text="Windows эрх хүрэлцэхгүй байна";frameStatus.Text="Эзэмшигч RAINY-г администратороор нээгээд дахин холбоно уу.";}
  public void MarkVerified(){verified=true;confirm.Enabled=false;confirm.Text="Код баталгаажсан";UpdateWaiting();}
  public void SetPeerReady(){peerReady=true;UpdateWaiting();}
  void UpdateWaiting(){
   if(frameCount>0)return;
   string title=!verified?"Холболтын кодоо баталгаажуулна уу":!peerReady?"Нөгөө талын баталгаажуулалтыг хүлээж байна":"Алсын дэлгэцийг бэлтгэж байна…";
-  string hint=!verified?"Баталгаажуулах цонхонд хоёр талын кодоо харьцуулна.":!peerReady?"Нөгөө компьютер дээр «Код ижил» товчийг дарна уу.":"Эхний зургийг хүлээж байна. Энэ цонх автоматаар шинэчлэгдэнэ.";
+  string hint=!verified?"Хоёр талын кодоо үндсэн цонхонд харьцуулна.":!peerReady?"Нөгөө компьютер дээр «Код ижил» товчийг дарна уу.":"Эхний зургийг хүлээж байна. Энэ цонх автоматаар шинэчлэгдэнэ.";
   if(verified&&peerReady&&Environment.TickCount64-started>15000){title="Дэлгэцийн зураг хараахан ирээгүй байна";hint="Нөгөө талын Windows түгжээг тайлж, дэлгэцээ хуваалцсан эсэхийг шалгана уу.";}
   waiting.Text=title+"\n\n"+hint;frameStatus.Text=title;
  }
@@ -58,9 +59,11 @@ sealed class ViewerForm : Form {
   double w=screen.Image.Width*scale,h=screen.Image.Height*scale,left=(screen.Width-w)/2,top=(screen.Height-h)/2;
   x=(p.X-left)/w;y=(p.Y-top)/h;return x>=0&&x<=1&&y>=0&&y<=1;
  }
- public void Frame(byte[] jpeg){
+ static Bitmap Decode(byte[] jpeg){
   using var stream=new MemoryStream(jpeg);using var image=Image.FromStream(stream);
-  if(image.Width>1280||image.Height>720||image.Width<1||image.Height<1)throw new InvalidDataException("Дүрсний хэмжээ буруу");
-  var bitmap=new Bitmap(image);var old=screen.Image;screen.Image=bitmap;old?.Dispose();frameCount++;waiting.Visible=false;frameStatus.Text=$"● Дэлгэц дамжиж байна   ·   {image.Width} × {image.Height}   ·   {frameCount} зураг хүлээн авсан";
+  if(image.Width>1920||image.Height>1080||image.Width<1||image.Height<1)throw new InvalidDataException("Дүрсний хэмжээ буруу");return new Bitmap(image);
  }
+ public async Task FrameAsync(byte[] jpeg){var bitmap=await Task.Run(()=>Decode(jpeg));if(IsDisposed||Disposing){bitmap.Dispose();return;}Display(bitmap);}
+ public void Frame(byte[] jpeg)=>Display(Decode(jpeg));
+ void Display(Bitmap bitmap){var old=screen.Image;screen.Image=bitmap;old?.Dispose();frameCount++;waiting.Visible=false;frameStatus.Text=$"● Шууд дамжуулалт   ·   {bitmap.Width} × {bitmap.Height}   ·   Сүлжээнд автоматаар тохируулна";}
 }

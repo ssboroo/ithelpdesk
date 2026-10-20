@@ -18,16 +18,16 @@ sealed partial class MainForm {
   Ui.Field(target,"9 оронтой дугаар",300);target.Name="TargetId";remote.Controls.Add(target);remote.Controls.Add(Ui.Text("Нэг удаагийн код",10,false,Ui.Muted));Ui.Field(pin,"6 оронтой код",300);pin.Name="TargetPin";pin.UseSystemPasswordChar=true;remote.Controls.Add(pin);
   request.Name="RequestConnection";request.Text="Холбогдох  →";Ui.Style(request,true);request.Width=300;request.Click+=async(_,_)=>await Invite();remote.Controls.Add(request);layout.Controls.Add(remote,1,1);
   var progress=Ui.Stack(18);progress.BackColor=Ui.Soft;progress.Margin=new Padding(0,18,0,0);session.Text="Холболт нээгдээгүй";session.AutoSize=true;session.Font=new Font("Segoe UI",12,FontStyle.Bold);session.ForeColor=Ui.Ink;progress.Controls.Add(session);
-  var actions=new FlowLayoutPanel{Width=720,Height=52};verify.Text="Кодоо баталгаажуулах";Ui.Style(verify);verify.Width=245;verify.Enabled=false;verify.Click+=async(_,_)=>{if(crypto!=null){using var dialog=new VerificationDialog(crypto.Fingerprint,role=="host");if(dialog.ShowDialog(this)==DialogResult.OK)await Verify();}};
+  var actions=new FlowLayoutPanel{Width=720,Height=52};verify.Text="Кодоо баталгаажуулах";Ui.Style(verify);verify.Width=245;verify.Enabled=false;verify.Click+=async(_,_)=>{if(crypto!=null){using var dialog=new VerificationDialog(crypto.Fingerprint,role=="host");if(await ShowInline(dialog)==DialogResult.OK)await Verify();}};
   end.Text="Холболт салгах";end.Name="StopSession";Ui.Style(end);end.Width=200;end.Enabled=false;end.Click+=(_,_)=>Disconnect();actions.Controls.Add(verify);actions.Controls.Add(end);progress.Controls.Add(actions);layout.Controls.Add(progress,0,2);layout.SetColumnSpan(progress,2);
   status.Text="Холболтыг бэлдэж байна…";status.ForeColor=Ui.Muted;status.Dock=DockStyle.Fill;status.Padding=new Padding(0,14,0,0);status.Font=new Font("Segoe UI",10);layout.Controls.Add(status,0,3);layout.SetColumnSpan(status,2);Controls.Add(layout);layout.BringToFront();
   server.Text=BuildConfig.DefaultRelay;try{if(File.Exists(settings))server.Text=File.ReadAllText(settings);}catch(IOException){}
   connect.Text="Дахин холбогдох";Ui.Style(connect);connect.Width=220;connect.Click+=async(_,_)=>await Connect();
   Shown+=async(_,_)=>await Connect();FormClosing+=(_,_)=>{Disconnect();net?.Dispose();};
  }
- void OpenSettings(){
+ async void OpenSettings(){
   using var dialog=new Form{Text="Холболтын тохиргоо",ClientSize=new Size(620,300),BackColor=Color.White,StartPosition=FormStartPosition.CenterParent,Font=Font,MaximizeBox=false,MinimizeBox=false};
   var body=Ui.Stack();body.Controls.Add(Ui.Text("Серверийн тохиргоо",19,true));body.Controls.Add(Ui.Text("Ердийн хэрэглээнд өөрчлөх шаардлагагүй.",10,false,Ui.Muted));server.Width=550;body.Controls.Add(server);body.Controls.Add(connect);
-  body.Controls.Add(new Label{Text="Холбогдох үед кодоо хоёр тал харьцуулж батална.\nДэлгэц хуваалцах эрхийг зөвхөн эзэмшигч олгоно.",AutoSize=true,ForeColor=Ui.Muted,Margin=new Padding(0,16,0,0)});dialog.Controls.Add(body);dialog.ShowDialog(this);body.Controls.Remove(server);body.Controls.Remove(connect);
+  body.Controls.Add(new Label{Text="Холбогдох үед кодоо хоёр тал харьцуулж батална.\nДэлгэц хуваалцах эрхийг зөвхөн эзэмшигч олгоно.",AutoSize=true,ForeColor=Ui.Muted,Margin=new Padding(0,16,0,0)});var back=Ui.Button("Буцах");back.DialogResult=DialogResult.Cancel;body.Controls.Add(back);dialog.Controls.Add(body);await ShowInline(dialog);body.Controls.Remove(server);body.Controls.Remove(connect);
  }
 }

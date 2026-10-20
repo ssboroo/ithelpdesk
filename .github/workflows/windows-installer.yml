@@ -91,4 +91,4 @@ jobs:
         run: >-
           gh release create "v3.0.${{ github.run_number }}" release/*
           --target "${{ github.sha }}" --title "RAINY Remote Native 3.0.${{ github.run_number }}"
-          --notes "Өөрийн Windows native клиент, relay, дэлгэц, гар/хулгана. RustDesk / AnyDesk / Python шаардлагагүй. Зөвшөөрөл ба хос код баталгаажуулалттай. Primary display, 1280x720 хүртэл, 12fps хүртэл; файл, дуу, clipboard, UAC control хараахан ороогүй. CI live relay roundtrip болон Windows capture/render шалгасан."
+          --notes "Өөрийн Windows native клиент, relay, дэлгэц, гар/хулгана. RustDesk / AnyDesk / Python шаардлагагүй. Зөвшөөрөл ба хос код баталгаажуулалттай. Нэг цонхны урсгал, frame ACK backpressure, background decode, adaptive 1080p хүртэл, 20fps хүртэл; файл, дуу, clipboard, UAC control хараахан ороогүй. CI live relay roundtrip болон Windows capture/render шалгасан."

@@ -11,14 +11,14 @@ static class Desktop {
   using(var g=Graphics.FromImage(original))g.CopyFromScreen(bounds.Location,Point.Empty,bounds.Size);
   return Encode(original);
  }
- internal static byte[] Encode(Bitmap original){
-  double scale=Math.Min(1,Math.Min(1280.0/original.Width,720.0/original.Height));
+ internal static byte[] Encode(Bitmap original,int maxWidth=1920,int maxHeight=1080,long quality=78,int budget=FrameBudget){
+  double scale=Math.Min(1,Math.Min((double)maxWidth/original.Width,(double)maxHeight/original.Height));
   var codec=ImageCodecInfo.GetImageEncoders().First(c=>c.MimeType=="image/jpeg");
   for(int attempt=0;attempt<7;attempt++){
    using var image=new Bitmap(Math.Max(1,(int)(original.Width*scale)),Math.Max(1,(int)(original.Height*scale)));
    using(var g=Graphics.FromImage(image)){g.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.Bilinear;g.DrawImage(original,0,0,image.Width,image.Height);}
-   using var output=new MemoryStream();using var options=new EncoderParameters(1);options.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,Math.Max(25L,50L-attempt*5));image.Save(output,codec,options);
-   if(output.Length<=FrameBudget)return output.ToArray();scale*=0.8;
+   using var output=new MemoryStream();using var options=new EncoderParameters(1);options.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,Math.Max(25L,quality-attempt*9));image.Save(output,codec,options);
+   if(output.Length<=budget)return output.ToArray();scale*=0.8;
   }
   throw new InvalidOperationException("Дэлгэцийн зургийг бэлтгэж чадсангүй.");
  }
@@ -27,20 +27,21 @@ static class Desktop {
 // Reuse the full-size capture surface; unchanged frames need no JPEG or network packet.
 sealed class CaptureSession : IDisposable {
  Bitmap? surface; Graphics? graphics; byte[] pixels=[]; byte[]? previous; long lastSent;
- internal byte[]? EncodeChanged(Bitmap image,long now){
+ internal byte[]? EncodeChanged(Bitmap image,long now,int latency=140){
   var area=new Rectangle(0,0,image.Width,image.Height);
   var data=image.LockBits(area,ImageLockMode.ReadOnly,PixelFormat.Format24bppRgb);
   byte[] digest;
   try{int size=Math.Abs(data.Stride)*image.Height;if(pixels.Length!=size)pixels=new byte[size];Marshal.Copy(data.Scan0,pixels,0,size);digest=SHA256.HashData(pixels);}
   finally{image.UnlockBits(data);}
   if(previous is not null&&digest.AsSpan().SequenceEqual(previous)&&now-lastSent<2000)return null;
-  var encoded=Desktop.Encode(image);previous=digest;lastSent=now;return encoded;
+  int width=latency>700?960:latency>350?1280:1920;
+  var encoded=Desktop.Encode(image,width,width*9/16,latency>700?50:latency>350?65:78,latency>700?65000:latency>350?140000:Desktop.FrameBudget);previous=digest;lastSent=now;return encoded;
  }
- public byte[]? Next(){
+ public byte[]? Next(int latency=140){
   var bounds=Screen.PrimaryScreen?.Bounds??throw new InvalidOperationException("Дэлгэц олдсонгүй.");
   if(surface is null||surface.Size!=bounds.Size){Dispose();surface=new Bitmap(bounds.Width,bounds.Height,PixelFormat.Format24bppRgb);graphics=Graphics.FromImage(surface);previous=null;}
   graphics!.CopyFromScreen(bounds.Location,Point.Empty,bounds.Size);
-  return EncodeChanged(surface,Environment.TickCount64);
+  return EncodeChanged(surface,Environment.TickCount64,latency);
  }
  public void Dispose(){graphics?.Dispose();surface?.Dispose();graphics=null;surface=null;}
 }
