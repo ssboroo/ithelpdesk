@@ -2,6 +2,8 @@ __pycache__/
 *.pyc
 *.db
 *.db-*
+contacts.json
+engine/
 build/
 dist/
 release/

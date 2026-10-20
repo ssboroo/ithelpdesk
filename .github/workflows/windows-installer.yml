@@ -22,24 +22,35 @@ jobs:
             choco install innosetup --yes --no-progress
             if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
           }
+      - name: Verify upstream remote engine download
+        run: python scripts/verify-engine.py
       - name: Test and build installer
         shell: pwsh
-        run: ./build-windows.ps1 -Version "1.0.${{ github.run_number }}"
+        run: ./build-windows.ps1 -Version "2.0.${{ github.run_number }}"
       - name: Verify silent install, installed app, and uninstall
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $target = Join-Path $env:RUNNER_TEMP 'HelpdeskSmoke'
-          $setup = Get-ChildItem release/ITHelpdesk-Setup-*.exe | Select-Object -First 1
+          $target = Join-Path $env:RUNNER_TEMP 'RainyRemoteSmoke'
+          $setup = Get-ChildItem release/RainyRemote-Setup-*.exe | Select-Object -First 1
           $process = Start-Process $setup.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$target") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Setup failed: $($process.ExitCode)" }
-          $app = Start-Process "$target/ITHelpdesk.exe" -PassThru
+          $app = Start-Process "$target/RainyRemote.exe" -PassThru
           Start-Sleep -Seconds 8
           $app.Refresh()
           if ($app.HasExited) { throw 'Installed application exited unexpectedly' }
           Stop-Process -Id $app.Id
           $uninstall = Start-Process "$target/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
+      - name: Verify portable client
+        shell: pwsh
+        run: |
+          $app = Start-Process 'release/RainyRemote-Portable.exe' -PassThru
+          Start-Sleep -Seconds 8
+          $app.Refresh()
+          if ($app.HasExited) { throw 'Portable application exited unexpectedly' }
+          Stop-Process -Id $app.Id
+          Get-Process -Name 'RainyRemote-Portable' -ErrorAction SilentlyContinue | Stop-Process -Force
       - name: Installer and checksum
         shell: pwsh
         run: |
@@ -49,7 +60,7 @@ jobs:
           }
       - uses: actions/upload-artifact@v4
         with:
-          name: ITHelpdesk-Windows-Installer
+          name: RainyRemote-Windows
           path: release/*
           if-no-files-found: error
           retention-days: 30
@@ -62,14 +73,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ITHelpdesk-Windows-Installer
+          name: RainyRemote-Windows
           path: release
       - name: Publish downloadable installer
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: >-
-          gh release create "v1.0.${{ github.run_number }}" release/*
+          gh release create "v2.0.${{ github.run_number }}" release/*
           --target "${{ github.sha }}"
-          --title "IT Helpdesk 1.0.${{ github.run_number }}"
-          --notes "Монгол Windows desktop хувилбар. Installer болон SHA256 хавсаргав. Нэг компьютерийн офлайн SQLite сан; олон хэрэглэгчийн серверийн горим агуулаагүй."
+          --title "RAINY Remote 2.0.${{ github.run_number }}"
+          --notes "RAINY Remote: зөвхөн алсын удирдлагын Windows клиент. Installer, portable болон SHA256. RustDesk хөдөлгүүрийг анх ашиглахдаа албан ёсны эхээс татна. Helpdesk модулиудыг хассан. Хоёр бодит төхөөрөмжийн интернет холболтын туршилт хийгдээгүй."
