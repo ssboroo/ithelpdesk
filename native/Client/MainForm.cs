@@ -57,13 +57,14 @@ sealed partial class MainForm : Form {
      session.Text=$"{m.S("peer")} · Холболтын кодоо баталгаажуулна уу";status.Text="Доорх кодоо харьцуулж, хоёр тал зөвшөөрнө.";
      if(role=="host"){verify.Enabled=true;Text="RAINY Remote · Хуваалцах зөвшөөрөл хүлээж байна";}
      else if(role=="viewer"){viewer=new ViewerForm(m.S("peer"),crypto.Fingerprint,canControl,SendProtected,()=>_=Verify(),Disconnect);viewer.TopLevel=false;viewer.FormBorderStyle=FormBorderStyle.None;viewer.MinimumSize=Size.Empty;viewer.Dock=DockStyle.Fill;foreach(Control home in Controls)home.Visible=false;Controls.Add(viewer);viewer.Show();viewer.BringToFront();}else {Disconnect();break;}
-     using(var confirmation=new VerificationDialog(crypto.Fingerprint,role=="host")){
-      if(await ShowInline(confirmation)==DialogResult.OK&&crypto!=null)await Verify();else Disconnect();
+     int confirmedVersion=generation;using(var confirmation=new VerificationDialog(crypto.Fingerprint,role=="host")){
+      var confirmed=await ShowInline(confirmation);if(confirmedVersion!=generation)break;
+      if(confirmed==DialogResult.OK&&crypto!=null)await Verify();else Disconnect();
      }
      break;
     case "data":
      if(crypto==null||m.S("sid")!=sid)return;var data=crypto.Open(sid,m);lastPeerPacket=Environment.TickCount64;
-     if(data.S("k")=="ready"){remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
+     if(data.S("k")=="ready"){if(data.N("protocol")!=4){Disconnect();status.Text="Хоёр компьютер дээр ижил шинэ хувилбар суулгана уу. Нөгөө талын дамжуулалтын хувилбар хуучин байна.";return;}remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
      else if(data.S("k")=="frame"&&role=="viewer"&&localVerified&&remoteVerified){if(viewer==null)return;var activeViewer=viewer;int version=generation;await activeViewer.FrameAsync(Convert.FromBase64String(data.S("jpeg")));if(version!=generation||viewer!=activeViewer)return;ReceivedFrames++;session.Text=$"Дэлгэц дамжиж байна · {ReceivedFrames} зураг хүлээн авлаа";status.Text="Холболт хэвийн. Дуусгахдаа «Холболт салгах» дарна уу.";await SendProtected(new{k="frame_ack",id=data.N("id")});}
      else if(data.S("k")=="quality"&&role=="host"&&localVerified&&remoteVerified){Volatile.Write(ref qualityMode,(int)Math.Clamp(data.N("mode"),0,2));}
      else if(data.S("k")=="frame_ack"&&role=="host"){frames?.Acknowledge(data.N("id"));session.Text="Дэлгэц амжилттай хүрсэн · Хуваалцаж байна";}
@@ -82,7 +83,7 @@ sealed partial class MainForm : Form {
    }
   }catch(Exception e){Disconnect();status.Text="Холболт зогслоо. "+ErrorText(e);}
  }
- async Task Verify(){localVerified=true;verify.Enabled=false;viewer?.MarkVerified();session.Text=remoteVerified?"Дэлгэц дамжуулалтыг эхлүүлж байна":"Нөгөө тал кодоо баталгаажуулахыг хүлээж байна";await SendProtected(new{k="ready"});MaybeCapture();}
+ async Task Verify(){localVerified=true;verify.Enabled=false;viewer?.MarkVerified();session.Text=remoteVerified?"Дэлгэц дамжуулалтыг эхлүүлж байна":"Нөгөө тал кодоо баталгаажуулахыг хүлээж байна";await SendProtected(new{k="ready",protocol=4});MaybeCapture();}
  void MaybeCapture(){
   if(role!="host"||!localVerified||!remoteVerified||capture!=null||crypto==null)return;
   capture=new CancellationTokenSource();var token=capture.Token;Text="● RAINY Remote · ДЭЛГЭЦ ХУВААЛЦАЖ БАЙНА";status.Text=canControl?"Дэлгэц, гар, хулгана хуваалцаж байна. Салгах товчоор хүссэн үедээ зогсооно.":"Дэлгэцийг зөвхөн харах эрхээр хуваалцаж байна.";
