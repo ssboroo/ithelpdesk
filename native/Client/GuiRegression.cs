@@ -6,7 +6,7 @@ static class GuiRegression {
    host.ClientSize=size;Application.DoEvents();var scroll=Find<Panel>(host,"HomeScroll");AssertInside(Find<Button>(host,"RequestConnection"),scroll);
    using var bitmap=new Bitmap(host.Width,host.Height);host.DrawToBitmap(bitmap,new Rectangle(Point.Empty,host.Size));bitmap.Save($"ui-layout-{size.Width}.png");
   }
-  using var viewer=new ViewerForm("123456789","test",true,_=>Task.CompletedTask,()=>{},()=>{}){TopLevel=false,FormBorderStyle=FormBorderStyle.None,Dock=DockStyle.Fill,MinimumSize=Size.Empty};guest.Controls.Add(viewer);viewer.Show();viewer.BringToFront();guest.ClientSize=new Size(640,480);Application.DoEvents();AssertInside(Find<Button>(viewer,"StopViewer"),viewer,true);AssertInside(Find<ComboBox>(viewer,"StreamQuality"),viewer,true);using var image=new Bitmap(guest.Width,guest.Height);guest.DrawToBitmap(image,new Rectangle(Point.Empty,guest.Size));image.Save("ui-viewer-small.png");viewer.InternalClose=true;guest.Controls.Remove(viewer);
+
  }
  static void AssertInside(Control child,Control container,bool vertical=false){var rect=container.RectangleToClient(child.RectangleToScreen(child.ClientRectangle));if(rect.Left<0||rect.Right>container.ClientSize.Width||(vertical&&(rect.Top<0||rect.Bottom>container.ClientSize.Height)))throw new Exception("Horizontal clipping at "+container.Size+": "+child.Name);}
  public static void Run(){
@@ -30,7 +30,9 @@ static class GuiRegression {
     if(phase==0&&guest.ReceivedFrames>=3&&host.SentFrames>=3){
      using(var bitmap=new Bitmap(host.Width,host.Height)){host.DrawToBitmap(bitmap,new Rectangle(Point.Empty,host.Size));bitmap.Save("ui-main.png");}
      if(guest.Viewer!=null)using(var bitmap=new Bitmap(guest.Viewer.Width,guest.Viewer.Height)){guest.Viewer.DrawToBitmap(bitmap,new Rectangle(Point.Empty,guest.Viewer.Size));bitmap.Save("ui-viewer.png");}
-     phase=1;phaseTime=Environment.TickCount64;_=guest.SendProtected(new{k="input",action="move",x=0.01,y=0.99});
+     phase=1;phaseTime=Environment.TickCount64;
+     var normalSize=guest.ClientSize;guest.ClientSize=new Size(640,480);Application.DoEvents();if(guest.Viewer==null||guest.Controls.GetChildIndex(guest.Viewer)!=0)throw new Exception("Viewer hidden behind home");AssertInside(Find<Button>(guest.Viewer,"StopViewer"),guest.Viewer,true);AssertInside(Find<ComboBox>(guest.Viewer,"StreamQuality"),guest.Viewer,true);using(var small=new Bitmap(guest.Width,guest.Height)){guest.DrawToBitmap(small,new Rectangle(Point.Empty,guest.Size));small.Save("ui-viewer-small.png");}guest.ClientSize=normalSize;
+     _=guest.SendProtected(new{k="input",action="move",x=0.01,y=0.99});
     }
     if(phase==1&&Environment.TickCount64-phaseTime>300){if(host.InputAppliedCount!=0)throw new Exception("Read-only peer could inject input");phase=2;Find<Button>(guest.Viewer!,"RequestControl").PerformClick();}
     if(phase==2&&guest.Viewer?.ControlAllowed==true){phase=3;_=guest.SendProtected(new{k="input",action="move",x=0.01,y=0.99,probe=17});}
