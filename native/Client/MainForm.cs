@@ -7,7 +7,8 @@ sealed partial class MainForm : Form {
  CancellationTokenSource? heartbeat;long lastPeerPacket;
  ViewerForm? viewer;Form? consent;FrameFlow? frames;int generation;
  readonly string settings=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RainyRemote3","server.txt");
- public MainForm(){InitializeInterface();}
+ public MainForm(){InitializeInterface();InitializeNotifications();}
+ internal Transport? Connection=>net;
  internal string DeviceId=>myId.Tag as string??"";
  internal string PairCode=>myPin.Tag as string??"";
  internal int ReceivedFrames {get;private set;}
@@ -20,11 +21,12 @@ sealed partial class MainForm : Form {
  internal ViewerForm? Viewer=>viewer;
  void UI(Action action){if(IsDisposed||!IsHandleCreated)return;try{BeginInvoke((Action)(()=>{if(!IsDisposed)action();}));}catch(InvalidOperationException){}}
  async Task Connect(){
+  if(connecting||appClosing)return;
   if(crypto!=null||pending){status.Text="Эхлээд одоогийн холболтоо салгана уу.";return;}
-  connect.Enabled=false;net?.Dispose();net=new Transport();var connection=net;
-  connection.Message+=m=>UI(()=>{if(net==connection)OnPacket(m);});connection.Closed+=s=>UI(()=>{if(net!=connection)return;StopSession();connectionBadge.Text="● Холболт тасарсан";myId.Text="Холболтгүй";myId.Tag=null;myPin.Text="Код: —";myPin.Tag=null;status.Text=s+" · Серверт дахин холбогдоно уу.";connect.Enabled=true;});
+  connecting=true;connect.Enabled=false;net?.Dispose();net=new Transport();var connection=net;
+  connection.Message+=m=>UI(()=>{if(net==connection)OnPacket(m);});connection.Closed+=s=>UI(()=>{if(net!=connection)return;StopSession();connectionBadge.Text="● Холболт тасарсан";myId.Text="Холболтгүй";myId.Tag=null;myPin.Text="Код: —";myPin.Tag=null;status.Text=s+" · Серверт дахин холбогдоно уу.";connect.Enabled=true;ScheduleReconnect();});
   try{status.Text="Сервертэй холбогдож байна…";await connection.Connect(server.Text.Trim());Directory.CreateDirectory(Path.GetDirectoryName(settings)!);File.WriteAllText(settings,server.Text.Trim());}
-  catch(Exception e){status.Text="Холбогдсонгүй. "+ErrorText(e);connection.Dispose();}finally{connect.Enabled=true;}
+  catch(Exception e){status.Text="Холбогдсонгүй. "+ErrorText(e);connection.Dispose();ScheduleReconnect();}finally{connecting=false;connect.Enabled=true;}
  }
  async Task Invite(){
   try{
@@ -37,11 +39,11 @@ sealed partial class MainForm : Form {
  async void OnPacket(JsonElement m){
   try{
    switch(m.S("t")){
-    case "registered":connectionBadge.Text="● Холболт бэлэн";myId.Text=string.Join(" ",Enumerable.Range(0,3).Select(i=>m.S("id").Substring(i*3,3)));myId.Tag=m.S("id");myPin.Text=m.S("pin");myPin.Tag=m.S("pin");status.Text="Бэлэн · Дэлгэц дамжуулаагүй. Холбогдох хүний хүсэлтийг зөвшөөрсний дараа хуваалцана.";break;
+    case "registered":reconnect.Stop();reconnectAttempt=0;connectionBadge.Text="● Холболт бэлэн";myId.Text=string.Join(" ",Enumerable.Range(0,3).Select(i=>m.S("id").Substring(i*3,3)));myId.Tag=m.S("id");myPin.Text=m.S("pin");myPin.Tag=m.S("pin");status.Text="Бэлэн · Дэлгэц дамжуулаагүй. Холбогдох хүний хүсэлтийг зөвшөөрсний дараа хуваалцана.";break;
     case "waiting":session.Text="Нөгөө талын зөвшөөрлийг хүлээж байна";status.Text=m.S("message");break;
     case "invite":
      if(crypto!=null||pending){await net!.Send(new{t="reject",id=m.S("id")});return;}
-     string requestId=m.S("id");consent=new Form{Icon=Brand.AppIcon,Text="Холбогдох хүсэлт",ClientSize=new Size(560,360),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
+     NotifyInvitation(m.S("from"));string requestId=m.S("id");consent=new Form{Icon=Brand.AppIcon,Text="Холбогдох хүсэлт",ClientSize=new Size(560,360),StartPosition=FormStartPosition.CenterParent,FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false};
      var body=Ui.Stack(26);body.Controls.Add(Ui.Text("Танд туслах хүсэлт ирлээ",19,true));body.Controls.Add(new Label{Text=$"Төхөөрөмжийн дугаар: {m.S("from")}\nЯмар эрх олгохоо сонгоно уу.",AutoSize=true,ForeColor=Ui.Muted,Margin=new Padding(0,6,0,18)});
      bool granted=false;
      var allow=Ui.Button("Гар, хулгана удирдахыг зөвшөөрөх",true);allow.Width=490;allow.Name="AcceptConsent";allow.Click+=(_,_)=>{granted=true;consent.DialogResult=DialogResult.OK;};body.Controls.Add(allow);
@@ -64,8 +66,8 @@ sealed partial class MainForm : Form {
      break;
     case "data":
      if(crypto==null||m.S("sid")!=sid)return;var data=crypto.Open(sid,m);lastPeerPacket=Environment.TickCount64;
-     if(data.S("k")=="ready"){if(data.N("protocol")!=4){Disconnect();status.Text="Хоёр компьютер дээр ижил шинэ хувилбар суулгана уу. Нөгөө талын дамжуулалтын хувилбар хуучин байна.";return;}remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
-     else if(data.S("k")=="frame"&&role=="viewer"&&localVerified&&remoteVerified){if(viewer==null)return;var activeViewer=viewer;int version=generation;await activeViewer.FrameAsync(Convert.FromBase64String(data.S("jpeg")));if(version!=generation||viewer!=activeViewer)return;ReceivedFrames++;session.Text=$"Дэлгэц дамжиж байна · {ReceivedFrames} зураг хүлээн авлаа";status.Text="Холболт хэвийн. Дуусгахдаа «Холболт салгах» дарна уу.";await SendProtected(new{k="frame_ack",id=data.N("id")});}
+     if(data.S("k")=="ready"){if(data.N("protocol")!=5){Disconnect();status.Text="Хоёр компьютер дээр ижил шинэ хувилбар суулгана уу. Нөгөө талын дамжуулалтын хувилбар хуучин байна.";return;}remoteVerified=true;if(role=="viewer")viewer?.SetPeerReady();MaybeCapture();}
+     else if(data.S("k")=="frame"&&role=="viewer"&&localVerified&&remoteVerified){if(viewer==null)return;var activeViewer=viewer;int version=generation;await activeViewer.FrameAsync(data);if(version!=generation||viewer!=activeViewer)return;ReceivedFrames++;session.Text=$"Дэлгэц дамжиж байна · {ReceivedFrames} зураг хүлээн авлаа";status.Text="Холболт хэвийн. Дуусгахдаа «Холболт салгах» дарна уу.";await SendProtected(new{k="frame_ack",id=data.N("id")});}
      else if(data.S("k")=="quality"&&role=="host"&&localVerified&&remoteVerified){Volatile.Write(ref qualityMode,(int)Math.Clamp(data.N("mode"),0,2));}
      else if(data.S("k")=="frame_ack"&&role=="host"){frames?.Acknowledge(data.N("id"));session.Text="Дэлгэц амжилттай хүрсэн · Хуваалцаж байна";}
      else if(data.S("k")=="request_control"&&role=="host"&&!canControl&&localVerified&&remoteVerified&&!controlRequestPending){
@@ -83,12 +85,12 @@ sealed partial class MainForm : Form {
    }
   }catch(Exception e){Disconnect();status.Text="Холболт зогслоо. "+ErrorText(e);}
  }
- async Task Verify(){localVerified=true;verify.Enabled=false;viewer?.MarkVerified();session.Text=remoteVerified?"Дэлгэц дамжуулалтыг эхлүүлж байна":"Нөгөө тал кодоо баталгаажуулахыг хүлээж байна";await SendProtected(new{k="ready",protocol=4});MaybeCapture();}
+ async Task Verify(){localVerified=true;verify.Enabled=false;viewer?.MarkVerified();session.Text=remoteVerified?"Дэлгэц дамжуулалтыг эхлүүлж байна":"Нөгөө тал кодоо баталгаажуулахыг хүлээж байна";await SendProtected(new{k="ready",protocol=5});MaybeCapture();}
  void MaybeCapture(){
   if(role!="host"||!localVerified||!remoteVerified||capture!=null||crypto==null)return;
   capture=new CancellationTokenSource();var token=capture.Token;Text="● RAINY Remote · ДЭЛГЭЦ ХУВААЛЦАЖ БАЙНА";status.Text=canControl?"Дэлгэц, гар, хулгана хуваалцаж байна. Салгах товчоор хүссэн үедээ зогсооно.":"Дэлгэцийг зөвхөн харах эрхээр хуваалцаж байна.";
   var flow=frames!;int version=generation;string activeSid=sid;
-  _=Task.Run(async()=>{try{using var grabber=new CaptureSession();while(!token.IsCancellationRequested){long started=Environment.TickCount64;byte[]? jpeg=grabber.Next(flow.RoundTripMs,Volatile.Read(ref qualityMode));if(jpeg is not null){long id=flow.Begin();await SendProtectedFor(new{k="frame",id,jpeg=Convert.ToBase64String(jpeg)},activeSid);Interlocked.Increment(ref SentFrames);await flow.Wait(token);}int pause=(int)Math.Max(1,50-(Environment.TickCount64-started));await Task.Delay(pause,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{if(version!=generation)return;Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
+  _=Task.Run(async()=>{try{using var grabber=new CaptureSession();while(!token.IsCancellationRequested){long started=Environment.TickCount64;FrameUpdate? update=grabber.Next(flow.RoundTripMs,Volatile.Read(ref qualityMode));if(update is not null){long id=flow.Begin();await SendProtectedFor(update.Packet(id),activeSid);Interlocked.Increment(ref SentFrames);await flow.Wait(token);}int pause=(int)Math.Max(1,50-(Environment.TickCount64-started));await Task.Delay(pause,token);}}catch(OperationCanceledException){}catch(Exception e){UI(()=>{if(version!=generation)return;Disconnect();status.Text="Дэлгэц дамжуулалт зогслоо. "+ErrorText(e);});}});
  }
  public Task SendProtected(object message)=>SendProtectedFor(message,null);
  async Task SendProtectedFor(object message,string? expectedSession){
@@ -104,9 +106,9 @@ sealed partial class MainForm : Form {
  }
  void Disconnect(){if(net?.IsOpen==true)_=net.Send(new{t="end"}).ContinueWith(_=>{});StopSession();status.Text="Холболт салгасан. Дэлгэц дамжуулахгүй.";}
  void StopSession(){
-  generation++;CancelInline();frames=null;heartbeat?.Cancel();heartbeat=null;capture?.Cancel();capture=null;input.Release();sid="";pending=false;localVerified=remoteVerified=false;role="";canControl=false;
+  generation++;controlRequestPending=false;CancelInline();frames=null;heartbeat?.Cancel();heartbeat=null;capture?.Cancel();capture=null;input.Release();sid="";pending=false;localVerified=remoteVerified=false;role="";canControl=false;
   crypto?.Dispose();crypto=null;verify.Enabled=false;end.Enabled=false;request.Enabled=true;session.Text="Холболт нээгдээгүй";Text="RAINY Remote · Бие даасан алсын удирдлага";
-  if(viewer!=null){var old=viewer;viewer=null;old.InternalClose=true;Controls.Remove(old);old.Close();old.Dispose();foreach(Control home in Controls)home.Visible=true;}
+  if(viewer!=null){var old=viewer;viewer=null;old.InternalClose=true;Controls.Remove(old);old.Close();old.Dispose();foreach(Control home in Controls)home.Visible=true;OnResize(EventArgs.Empty);}
 
  }
 }

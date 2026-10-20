@@ -6,7 +6,7 @@ sealed partial class MainForm {
   CancelInline();var result=new TaskCompletionSource<DialogResult>(TaskCreationOptions.RunContinuationsAsynchronously);inlinePrompt=form;promptResult=result;
   form.TopLevel=false;form.FormBorderStyle=FormBorderStyle.None;form.MinimumSize=Size.Empty;
   var surface=new Panel{Dock=DockStyle.Fill,BackColor=Ui.Canvas};promptSurface=surface;
-  surface.Resize+=(_,_)=>form.Location=new Point(Math.Max(0,(surface.Width-form.Width)/2),Math.Max(0,(surface.Height-form.Height)/2));
+  var preferred=form.Size;surface.Resize+=(_,_)=>{form.Size=new Size(Math.Min(preferred.Width,Math.Max(1,surface.Width-24)),Math.Min(preferred.Height,Math.Max(1,surface.Height-24)));form.Location=new Point(Math.Max(0,(surface.Width-form.Width)/2),Math.Max(0,(surface.Height-form.Height)/2));};foreach(var stack in Descendants(form).OfType<FlowLayoutPanel>())if(stack.FlowDirection==FlowDirection.TopDown)Ui.FitStack(stack);
   foreach(var button in Descendants(form).OfType<Button>())button.Click+=(_,_)=>{
    var choice=button.DialogResult!=DialogResult.None?button.DialogResult:form.DialogResult;
    if(choice==DialogResult.None||inlinePrompt!=form)return;

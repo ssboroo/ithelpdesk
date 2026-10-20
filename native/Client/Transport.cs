@@ -28,6 +28,7 @@ sealed class Transport : IDisposable {
   finally{sender.Release();}
  }
  async Task Receive(){
+  string reason="Сервертэй холболт хаагдлаа";
   try{
    var buffer=new byte[32768];
    while(!stop.IsCancellationRequested&&IsOpen){
@@ -38,8 +39,8 @@ sealed class Transport : IDisposable {
     }while(!result.EndOfMessage);
     using var doc=JsonDocument.Parse(message.ToArray());Message?.Invoke(doc.RootElement.Clone());
    }
-  }catch(Exception e)when(e is WebSocketException or IOException or JsonException or OperationCanceledException){Closed?.Invoke(e is OperationCanceledException?"Холболт хаагдлаа":"Сүлжээний холболт тасарлаа");}
-  finally{Closed?.Invoke("Сервертэй холболт хаагдлаа");}
+  }catch(Exception e)when(e is WebSocketException or IOException or JsonException or OperationCanceledException){reason=e is OperationCanceledException?"Холболт хаагдлаа":"Сүлжээний холболт тасарлаа";}
+  finally{Closed?.Invoke(reason);}
  }
  public void Dispose(){stop.Cancel();socket.Abort();socket.Dispose();}
 }

@@ -7,6 +7,10 @@ static class Ui {
  public static void Style(Button b,bool primary=false){b.UseVisualStyleBackColor=false;b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderColor=primary?Accent:Line;b.BackColor=primary?Accent:Color.White;b.ForeColor=primary?Color.White:Ink;b.Font=new Font("Segoe UI",11,FontStyle.Bold);b.Height=44;b.Cursor=Cursors.Hand;if(primary)b.EnabledChanged+=(_,_)=>{b.BackColor=b.Enabled?Accent:Color.FromArgb(226,234,235);b.ForeColor=b.Enabled?Color.White:Muted;};}
  public static FlowLayoutPanel Stack(int padding=24)=>new(){Dock=DockStyle.Fill,BackColor=Color.White,FlowDirection=FlowDirection.TopDown,WrapContents=false,Padding=new Padding(padding),AutoScroll=true};
  public static void Field(TextBox box,string placeholder,int width=350){box.Width=width;box.Font=new Font("Segoe UI",15);box.PlaceholderText=placeholder;box.BorderStyle=BorderStyle.FixedSingle;box.Margin=new Padding(0,4,0,18);}
+ public static void FitStack(FlowLayoutPanel panel){
+  void Fit(){int width=Math.Max(100,panel.ClientSize.Width-panel.Padding.Horizontal-4);foreach(Control child in panel.Controls){if(child is Label label){label.MaximumSize=new Size(width,0);}else child.Width=Math.Min(600,width);}}
+  panel.Resize+=(_,_)=>Fit();panel.ControlAdded+=(_,_)=>Fit();
+ }
  public static string Code(string code)=>string.Join("  ",Enumerable.Range(0,(code.Length+3)/4).Select(i=>code.Substring(i*4,Math.Min(4,code.Length-i*4))));
 }
 sealed class VerificationDialog:Form {

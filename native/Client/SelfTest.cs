@@ -16,16 +16,22 @@ static class SelfTest {
    byte[] jpeg=Desktop.Capture();using(var stream=new MemoryStream(jpeg))using(var image=Image.FromStream(stream)){Assert(image.Width<=1920&&image.Height<=1080,"Capture dimensions");}results.Add("Native Windows screen capture passed");
    using(var viewer=new ViewerForm("test","12345678",false,_=>Task.CompletedTask,()=>{},()=>{})){viewer.Frame(jpeg);Assert(viewer.Controls.Count>0,"Viewer UI");}results.Add("Native viewer JPEG rendering passed");
    using(var noise=new Bitmap(1920,1080)){var random=new Random(7);for(int y=0;y<noise.Height;y++)for(int x=0;x<noise.Width;x++)noise.SetPixel(x,y,Color.FromArgb(random.Next(256),random.Next(256),random.Next(256)));Assert(Desktop.Encode(noise).Length<=Desktop.FrameBudget,"Adaptive frame budget");}results.Add("High-entropy 1080p capture stays inside relay packet budget");
-   using(var still=new Bitmap(320,180,System.Drawing.Imaging.PixelFormat.Format24bppRgb))using(var capture=new CaptureSession()){
-    Assert(capture.EncodeChanged(still,0) is not null,"First frame missing");Assert(capture.EncodeChanged(still,83) is null,"Static frame sent twice");
-    still.SetPixel(1,1,Color.Red);Assert(capture.EncodeChanged(still,166) is not null,"Small screen change missed");Assert(capture.EncodeChanged(still,2200) is not null,"Refresh frame missing");
-   }results.Add("Static frame suppression, single-pixel change and periodic refresh passed");
+   TestDeltaFrames();results.Add("Delta tiles: static suppression, small change reconstruction, bandwidth reduction, refresh and dimension change passed");
    Task.Run(TestFrameFlow).GetAwaiter().GetResult();results.Add("Slow consumer: one frame in flight, stale ACK rejection, cancellation and recovery passed");
    TestInput();results.Add("Native Windows keyboard injection and release passed");
    Task.Run(()=>RoundTrip(jpeg)).GetAwaiter().GetResult();results.Add("Two native clients: live relay pairing, encrypted screen frame, encrypted input and disconnect passed");
-   GuiRegression.Run();results.Add("Two GUI clients: real consent, matching inline verification panels, at least 3 displayed frames, read-only input denial, explicit control grant, actual relayed host cursor movement and disconnect without extra top-level windows passed");
+   GuiRegression.Run();results.Add("Two GUI clients: real consent, matching inline verification panels, at least 3 displayed frames, read-only input denial, explicit control grant, actual relayed host cursor movement notification restore, disconnect, automatic server reconnect without session restore, 640/800/1024/1366 layouts without clipping and no extra top-level windows passed");
    File.WriteAllText("self-test-result.json",JsonSerializer.Serialize(new{ok=true,results},new JsonSerializerOptions{WriteIndented=true}));Environment.ExitCode=0;
   }catch(Exception e){File.WriteAllText("self-test-result.json",JsonSerializer.Serialize(new{ok=false,results,error=e.ToString()},new JsonSerializerOptions{WriteIndented=true}));Environment.ExitCode=1;}
+ }
+ static void TestDeltaFrames(){
+  using var source=new Bitmap(1280,720,System.Drawing.Imaging.PixelFormat.Format24bppRgb);using(var g=Graphics.FromImage(source)){g.Clear(Color.DarkBlue);for(int x=0;x<1280;x+=40)g.DrawLine(Pens.White,x,0,x,719);}
+  using var encoder=new FrameEncoder();using var renderer=new FrameRenderer();var first=encoder.Encode(source,0,100,1)!;using(var image=renderer.Apply(Json(first.Packet(1))))Assert(image.Size==source.Size,"Initial canvas size");
+  Assert(encoder.Encode(source,83,100,1) is null,"Static screen resent");using(var g=Graphics.FromImage(source))g.FillRectangle(Brushes.Lime,20,20,24,24);
+  var patch=encoder.Encode(source,166,100,1)!;Assert(patch.jpeg==null&&patch.tiles?.Length==1,"Small change did not use one tile");Assert(patch.EncodedBytes<first.EncodedBytes,"Patch did not reduce bandwidth");
+  using(var image=renderer.Apply(Json(patch.Packet(2)))){Assert(image.GetPixel(30,30).G>200,"Changed tile missing");Assert(image.GetPixel(900,600).B>50,"Unchanged canvas lost");}
+  Assert(encoder.Encode(source,10200,100,1)?.jpeg is not null,"Refresh missing");using var rotated=new Bitmap(720,1280);var changed=encoder.Encode(rotated,10300,100,1)!;using(var image=renderer.Apply(Json(changed.Packet(3))))Assert(image.Width<image.Height,"Portrait monitor aspect lost");
+  bool rejected=false;try{using var ignored=renderer.Apply(Json(new{width=1,height=1,tiles=new[]{new{x=0,y=0,jpeg=""}}}));}catch(InvalidDataException){rejected=true;}Assert(rejected,"Wrong patch dimensions accepted");
  }
  static async Task TestFrameFlow(){
   var flow=new FrameFlow();long first=flow.Begin();using var cancel=new CancellationTokenSource();var waiting=flow.Wait(cancel.Token);
