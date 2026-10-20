@@ -1,8 +1,7 @@
 #ifndef AppVersion
-  #define AppVersion "2.0.0"
+ #define AppVersion "3.0.0"
 #endif
 [Setup]
-; Same AppId upgrades the previous app in-place, without touching user databases.
 AppId={{D6354DA8-4BB5-4F8A-9E94-7D3EE222D081}
 AppName=RAINY Remote
 AppVersion={#AppVersion}
@@ -26,9 +25,10 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 Type: files; Name: "{app}\ITHelpdesk.exe"
 Type: files; Name: "{userdesktop}\IT Helpdesk Mongolia.lnk"
 Type: files; Name: "{userprograms}\IT Helpdesk Mongolia\IT Helpdesk Mongolia.lnk"
+; Remove the old bundled Python runtime when upgrading, not user data or RustDesk.
+Type: filesandordirs; Name: "{app}\_internal"
 [Files]
-Source: "..\dist\RainyRemote\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "..\THIRD_PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\native\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{group}\RAINY Remote"; Filename: "{app}\RainyRemote.exe"
 Name: "{autodesktop}\RAINY Remote"; Filename: "{app}\RainyRemote.exe"; Tasks: desktopicon

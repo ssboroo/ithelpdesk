@@ -1,62 +1,62 @@
-# RAINY Remote — Монгол алсын удирдлага
+# RAINY Remote Native 3
 
-Windows дээр нэг компьютерээс нөгөө компьютерт ID-аар холбогдож дэлгэц, гар, хулгана удирдах болон файл дамжуулах desktop клиент.
+**RustDesk / AnyDesk / Python ашиглахгүй**, өөрийн Windows native алсын дэлгэц, гар/хулганы удирдлагын эхний хувилбар. Клиент C# / .NET 8 WinForms, relay TypeScript / Bun WebSocket. Үйлчилгээ болон дэлгэцийн сесс өөрийн RAINY Remote цонхонд ажиллана.
 
-Өмнөх Helpdesk хүсэлт, хөрөнгө, лиценз, тайлан, өгөгдлийн сангийн модулиудыг код болон интерфэйсээс бүрэн хассан. Энэ репозиторийн үндсэн бүтээгдэхүүн нь зөвхөн **RAINY Remote**.
-
-## Татах
-
-[Хамгийн сүүлийн хувилбар](https://github.com/ssboroo/ithelpdesk/releases/latest)
-
-- `RainyRemote-Setup-2.0.N.exe` — Windows x64 installer.
-- `RainyRemote-Portable.exe` — суулгахгүй шууд нээх хувилбар, хоёр тал ижил программыг хэрэглэнэ.
-- `.sha256` — татсан файлын хэш.
-
-Python тусад нь суулгахгүй. Эхний удаа «Хөдөлгүүр бэлдэх» дарж RustDesk 1.5.0 хөдөлгүүрийг албан ёсны GitHub release-ээс шууд татна (~26 MB). Программ SHA256 хэш шалгаж, тохироогүй файлыг ажиллуулахгүй. Дараагийн удаа дахин татах шаардлагагүй. Өөрийн суулгасан RustDesk-ийн .exe-г сонгож ашиглаж болно.
+[Installer болон portable татах](https://github.com/ssboroo/ithelpdesk/releases/latest)
 
 ## Хэрэглэх
 
-1. Хоёр компьютерт RAINY Remote нээнэ.
-2. «Хөдөлгүүр бэлдэх» → «RustDesk нээх».
-3. Тусламж авах тал «ID шалгах» → «ID хуулах» → ID-гаа техникчдээ өгнө. Автоматаар ID авч чадаагүй бол RustDesk цонхноос харна.
-4. Техникч тэр ID-г баруун талд оруулж, «Дэлгэц удирдах» эсвэл «Файл дамжуулах» сонгоно.
-5. Эзэмшигчтэй тохиролцсон тэмдэглэгээг хийгээд «Холбогдох» дарна.
-6. Холболт RustDesk-ийн тусдаа цонхонд нээгдэнэ. Хүлээн авах тал RustDesk дээр хүсэлтийг зөвшөөрнө (эсвэл RustDesk-ийн өөрийн authentication тохиргоо үйлчилнэ).
-7. Ажил дуусахад **RustDesk холболтын цонхыг хааж салгана**. RAINY Remote-ийн цонх хаах нь RustDesk-ийг хаахгүй.
+1. Хоёр Windows x64 компьютерт шинэ `RainyRemote-Portable.exe` нээнэ (эсвэл Setup суулгана). .NET runtime тусад нь суулгахгүй.
+2. Программ өөрийн relay серверт автоматаар холбогдож 9 оронтой ID, 6 оронтой код авна. Интернэт шаардлагатай.
+3. Тусламж авах тал ID, кодоо техникчдээ өгнө. Техникч оруулаад «Холбогдох» дарна.
+4. Хүлээн авах тал «Зөвшөөрөх» сонгоно. Гар/хулгана удирдуулах бол тусдаа checkbox тэмдэглэнэ; default нь зөвхөн харах.
+5. **Хоёр талд гарсан 8 тэмдэгт баталгаажуулах код ижил эсэхийг утсаар харьцуулна.** Харах тал «Код таарлаа», хуваалцах тал «Код таарлаа — Хуваалцах» дарсны дараа л дүрс дамжина. Код зөрвөл салгана.
+6. Хуваалцаж буй компьютерийн дээр улаан «САЛГАХ» самбар байнга харагдана. Аль ч тал салгахад дүрс болон input зогсоно. Программ хаагдахад мөн холболт сална.
 
-Хаягийн дэвтэр нь нэр, ID хадгална. Нууц үгийг программ хадгалахгүй, байнгын нэвтрэх эрх болон үйлчилгээ суулгах тохиргоо хийхгүй. Холболтын зөвшөөрөл, дүрсний чанар, олон дэлгэц, чат, clipboard, файл дамжуулалтыг RustDesk өөрийн цонхонд удирдана.
+## Одоогоор ажиллах хүрээ
 
-Хоёр тал интернэттэй бөгөөд ижил public эсвэл ижил байгууллагын RustDesk сервер ашиглана. Өөрийн relay / ID серверийг RustDesk → Settings → Network дээр тохируулж болно. Энэ өөрчлөлтөөр тусдаа хувийн relay сервер байрлуулаагүй.
+- Primary monitor capture, 1280×720 хүртэл, JPEG quality 45, ойролцоогоор 6 fps (сүлжээ/CPU-ээс хамаарна).
+- Өөрийн viewer цонх, хэмжээ тааруулалт, захын хар зайг тооцсон хулганы координат.
+- Зөвшөөрсөн үед гар, зүүн/баруун/дунд click, wheel.
+- Read-only mode, зөвшөөрөх/татгалзах, хүсэлт цуцлах, session disconnect.
+- Хаяг, код нь холболт бүрт шинээр үүснэ. Байнгын нууц үг, unattended service, autostart байхгүй.
 
-## Ямар бүтээгдэхүүн вэ?
+**Файл дамжуулах, clipboard, дуу, олон дэлгэц, UAC / secure desktop / Ctrl+Alt+Del, hardware video codec, address book, auto-reconnect хараахан хийгдээгүй.** Эдгээрийн хуучин RustDesk-д тулгуурласан товч болон боломжийг шинэ native хувилбарт ажилладаг мэт харуулаагүй. AnyDesk-тэй дүйцэх latency / үйлдвэрлэлийн түвшний гүйцэтгэл, аюулгүй байдлын аудит хараахан баталгаажаагүй.
 
-AnyDesk-тэй төстэй алсын тусламжийн урсгалтай, Монгол нүүр интерфэйстэй **RustDesk-д тулгуурласан клиент**. AnyDesk-ийн протоколтой холбогдохгүй. Бие даан шинээр бичсэн screen capture / codec / transport хөдөлгүүр биш; RustDesk-ийг тусдаа процессоор ашиглана. Дэлгэцийн сессийг RAINY UI дотор embed хийгээгүй.
+## Холболт ба криптографи
 
-Сүүлд нээсэн түүх нь клиент цонхыг нээсэн үйлдэл. Холболт тогтсон, нөгөө компьютер онлайн, сесс дууссан гэсэн баталгаа биш. Холболтын бодит төлөв RustDesk цонхонд харагдана.
+- Relay: `wss://rainy-remote-relay-production.up.railway.app/ws`, Railway RAINY REMOTE project.
+- TLS дээр peer хооронд ephemeral ECDH P-256 → SHA256 key → AES-256-GCM payload.
+- Session ID, packet sequence нь authenticated additional data-д багтана. Replay болон session солихыг шалгана.
+- ECDH public key-ийг relay дамжуулдаг тул **хоёр талын баталгаажуулах кодыг бие даасан сувгаар харьцуулах шаардлагатай**. Кодыг шалгалгүй баталбал malicious relay / key substitution-аас хамгаалах баталгаа байхгүй.
+- Relay нь зөвшөөрөгдсөн хоёр socket-ийг л холбоно; frame/input ciphertext-ийг санах ойгоор дамжуулна. Дэлгэц, PIN, session content дискэнд болон application log-д хадгалахгүй.
+- PIN шалгалт, host consent, 45 секунд хүсэлтийн timeout, IP/target attempt limit, payload/rate/backpressure limits бий.
+- Relay нэг replica, ephemeral state; restart хийхэд бүх сесс сална. Хэмжээг 200 socket хүртэл хязгаарласан, autoscaling / HA / account controls хараахан хийгдээгүй.
 
-## Локал өгөгдөл
+Энэ нь custom protocol-ийн **эхний хувилбар**. Өөрийн зөвшөөрөлтэй төхөөрөмжүүд дээр туршина; audit болон олон сүлжээн дээрх бодит туршилтгүйгээр байгууллагын үндсэн remote access болгон зарлахгүй.
 
-`%LOCALAPPDATA%\RainyRemote\contacts.json` — хаягийн дэвтэр болон сүүлд нээсэн ID, төрөл, огноо (50 хүртэл).
+## Шалгалт
 
-`%LOCALAPPDATA%\RainyRemote\engine\` — татсан хөдөлгүүр, сонгосон executable тохиргоо.
+CI дараахыг гүйцэтгэнэ:
 
-Хуучин Helpdesk-ийн хэрэглэгчийн `helpdesk.db` файлыг устгахгүй; шинэ программ тэр санд хандахгүй. Upgrade нь хуучин executable болон shortcut-ийг орлоно. Эх кодын хуучин хувилбар Git түүхэнд үлдэнэ.
+- Live relay дээр PIN алдаа, татгалзах, хослол, гаднын socket хориглох, packet forwarding, replay, disconnect.
+- Native ECDH / AES-GCM roundtrip, replay, session isolation.
+- Windows native capture болон өөрийн viewer JPEG rendering.
+- **Хоёр native transport клиент → live relay → шифрлэсэн Windows screenshot → decrypt/compare**, encrypted input packet, disconnect.
+- Windows install / startup / uninstall болон portable startup.
 
-## Хөгжүүлэлт
+Нэг Windows runner дээрх тест нь хоёр тусдаа физик Windows төхөөрөмжийн keyboard/mouse үйлдэл, хэрэглэгчийн consent flow, удаан хугацааны reliability-г бүрэн орлохгүй. Тэдгээр нь нэмж бодитоор шалгах ажил хэвээр.
 
-Python 3.12 + Tkinter. Runtime-д нэмэлт Python dependency хэрэггүй.
+## Бүтээх
+
+Windows x64 + .NET 8 SDK + Inno Setup 6:
 
 ```powershell
-py -3 app.py
-py -3 -m unittest discover -s tests -v
+powershell -ExecutionPolicy Bypass -File .\build-windows.ps1 -Version 3.0.0
 ```
 
-Windows x64, Python 3.12 болон [Inno Setup 6](https://jrsoftware.org/isdl.php) ашиглан:
+`native/Client/BuildConfig.cs` нь анхдагч relay хаяг. Клиент дээрх серверийн хаягийг өөрчилж болно; WSS заавал, зөвхөн loopback дээр WS зөвшөөрнө. Локал серверийн тохиргоо `%LOCALAPPDATA%\RainyRemote3\server.txt`; ID/PIN/session key хадгалахгүй.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\build-windows.ps1 -Version 2.0.0
-```
+`relay/index.ts` нь deployed Railway Function-ийн эх код. Шинэчлэлт хийхдээ function-ийн source-г энэ файлаар шинэчилж, relay tests ажиллуулна. Repository push нь клиент installer-ийг автоматаар бүтээнэ; relay source update нь тусдаа deployment үйлдэл.
 
-CI нь peer ID validation, shell ашиглахгүй launch, hash verification, гэмтсэн таталт, хаягийн дэвтрийн atomic write, GUI-ийн урсгал, installer / portable startup, install / uninstall шалгана. Мөн official engine файлыг татаж SHA256 болон PE header шалгана. **Хоёр бодит төхөөрөмжийн end-to-end интернэт холболтыг энэ CI батлахгүй**. Түгээлтийн өмнө эзэмшигчийн зөвшөөрөлтэй хоёр Windows төхөөрөмж дээр дэлгэц удирдах, keyboard/mouse, файл дамжуулах, салгах үйлдлийг туршина.
-
-[THIRD_PARTY.md](THIRD_PARTY.md) дотор хөдөлгүүрийн эх сурвалж, хувилбар, хэш болон лицензийн холбоос бий.
+RustDesk суулгасан байсан ч энэ программ түүнийг нээхгүй, устгахгүй, тохиргоонд нь хандахгүй. Өмнөх Helpdesk өгөгдлийг уншихгүй.

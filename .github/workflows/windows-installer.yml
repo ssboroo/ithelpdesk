@@ -1,4 +1,4 @@
-name: Windows installer
+name: Native Windows remote desktop
 on:
   push:
     branches: [main]
@@ -7,63 +7,71 @@ on:
 permissions:
   contents: read
 jobs:
-  build:
-    runs-on: windows-latest
+  relay:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          architecture: x64
-      - name: Ensure Inno Setup is available
+      - run: pip install websockets==15.0.1
+      - run: python tests-native/relay_test.py
+  build:
+    needs: relay
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Ensure Inno Setup
         shell: pwsh
         run: |
           if (!(Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
             choco install innosetup --yes --no-progress
             if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
           }
-      - name: Verify upstream remote engine download
-        run: python scripts/verify-engine.py
-      - name: Test and build installer
+      - name: Build native client, test live encrypted screen roundtrip, package
         shell: pwsh
-        run: ./build-windows.ps1 -Version "2.0.${{ github.run_number }}"
-      - name: Verify silent install, installed app, and uninstall
+        run: ./build-windows.ps1 -Version "3.0.${{ github.run_number }}"
+      - name: Verify native install, UI startup, uninstall and portable startup
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $target = Join-Path $env:RUNNER_TEMP 'RainyRemoteSmoke'
-          $setup = Get-ChildItem release/RainyRemote-Setup-*.exe | Select-Object -First 1
-          $process = Start-Process $setup.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$target") -Wait -PassThru
-          if ($process.ExitCode -ne 0) { throw "Setup failed: $($process.ExitCode)" }
-          $app = Start-Process "$target/RainyRemote.exe" -PassThru
+          $ErrorActionPreference='Stop'
+          $target=Join-Path $env:RUNNER_TEMP 'RainyNativeSmoke'
+          $setup=Get-ChildItem release/RainyRemote-Setup-*.exe | Select-Object -First 1
+          $install=Start-Process $setup.FullName -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART',"/DIR=$target") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw 'Installation failed' }
+          $app=Start-Process "$target/RainyRemote.exe" -PassThru
           Start-Sleep -Seconds 8
           $app.Refresh()
-          if ($app.HasExited) { throw 'Installed application exited unexpectedly' }
+          if ($app.HasExited) { throw 'Installed application exited' }
           Stop-Process -Id $app.Id
-          $uninstall = Start-Process "$target/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
-          if ($uninstall.ExitCode -ne 0) { throw 'Uninstall failed' }
-      - name: Verify portable client
-        shell: pwsh
-        run: |
-          $app = Start-Process 'release/RainyRemote-Portable.exe' -PassThru
+          $remove=Start-Process "$target/unins000.exe" -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru
+          if ($remove.ExitCode -ne 0) { throw 'Uninstall failed' }
+          $portable=Start-Process 'release/RainyRemote-Portable.exe' -PassThru
           Start-Sleep -Seconds 8
-          $app.Refresh()
-          if ($app.HasExited) { throw 'Portable application exited unexpectedly' }
-          Stop-Process -Id $app.Id
-          Get-Process -Name 'RainyRemote-Portable' -ErrorAction SilentlyContinue | Stop-Process -Force
-      - name: Installer and checksum
+          $portable.Refresh()
+          if ($portable.HasExited) { throw 'Portable application exited' }
+          Stop-Process -Id $portable.Id
+      - name: Checksums
         shell: pwsh
         run: |
           Get-ChildItem release/*.exe | ForEach-Object {
-            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
             "$hash  $($_.Name)" | Set-Content "$($_.FullName).sha256" -Encoding ascii
           }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-test-results
+          path: self-test-result.json
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: RainyRemote-Windows
           path: release/*
           if-no-files-found: error
-          retention-days: 30
   release:
     needs: build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -75,12 +83,10 @@ jobs:
         with:
           name: RainyRemote-Windows
           path: release
-      - name: Publish downloadable installer
-        env:
+      - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: >-
-          gh release create "v2.0.${{ github.run_number }}" release/*
-          --target "${{ github.sha }}"
-          --title "RAINY Remote 2.0.${{ github.run_number }}"
-          --notes "RAINY Remote: зөвхөн алсын удирдлагын Windows клиент. Installer, portable болон SHA256. RustDesk хөдөлгүүрийг анх ашиглахдаа албан ёсны эхээс татна. Helpdesk модулиудыг хассан. Хоёр бодит төхөөрөмжийн интернет холболтын туршилт хийгдээгүй."
+          gh release create "v3.0.${{ github.run_number }}" release/*
+          --target "${{ github.sha }}" --title "RAINY Remote Native 3.0.${{ github.run_number }}"
+          --notes "Өөрийн Windows native клиент, relay, дэлгэц, гар/хулгана. RustDesk / AnyDesk / Python шаардлагагүй. Зөвшөөрөл ба хос код баталгаажуулалттай. Primary display, 1280x720 хүртэл, ойролцоогоор 6fps; файл, дуу, clipboard, UAC control хараахан ороогүй. CI live relay roundtrip болон Windows capture/render шалгасан."

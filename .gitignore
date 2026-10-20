@@ -2,10 +2,10 @@ __pycache__/
 *.pyc
 *.db
 *.db-*
-contacts.json
-engine/
+bin/
+obj/
 build/
 dist/
 release/
-*.spec
+self-test-result.json
 .venv/
