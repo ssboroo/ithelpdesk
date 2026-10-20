@@ -9,3 +9,5 @@ dist/
 release/
 self-test-result.json
 .venv/
+
+ui-*.png

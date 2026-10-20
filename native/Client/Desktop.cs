@@ -3,17 +3,25 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 namespace RainyRemote;
 static class Desktop {
+ public const int FrameBudget=450000;
  public static byte[] Capture(){
-  var bounds=Screen.PrimaryScreen?.Bounds??new Rectangle(0,0,1280,720);
+  var bounds=Screen.PrimaryScreen?.Bounds??throw new InvalidOperationException("Дэлгэц олдсонгүй. Windows түгжээгээ тайлна уу.");
   using var original=new Bitmap(bounds.Width,bounds.Height,PixelFormat.Format24bppRgb);
   using(var g=Graphics.FromImage(original))g.CopyFromScreen(bounds.Location,Point.Empty,bounds.Size);
-  double scale=Math.Min(1,Math.Min(1280.0/bounds.Width,720.0/bounds.Height));
-  using var image=new Bitmap(Math.Max(1,(int)(bounds.Width*scale)),Math.Max(1,(int)(bounds.Height*scale)));
-  using(var g=Graphics.FromImage(image)){g.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.Bilinear;g.DrawImage(original,0,0,image.Width,image.Height);}
-  using var output=new MemoryStream();var codec=ImageCodecInfo.GetImageEncoders().First(c=>c.MimeType=="image/jpeg");
-  using var options=new EncoderParameters(1);options.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,45L);
-  image.Save(output,codec,options);return output.ToArray();
+  return Encode(original);
  }
+ internal static byte[] Encode(Bitmap original){
+  double scale=Math.Min(1,Math.Min(1280.0/original.Width,720.0/original.Height));
+  var codec=ImageCodecInfo.GetImageEncoders().First(c=>c.MimeType=="image/jpeg");
+  for(int attempt=0;attempt<7;attempt++){
+   using var image=new Bitmap(Math.Max(1,(int)(original.Width*scale)),Math.Max(1,(int)(original.Height*scale)));
+   using(var g=Graphics.FromImage(image)){g.InterpolationMode=System.Drawing.Drawing2D.InterpolationMode.Bilinear;g.DrawImage(original,0,0,image.Width,image.Height);}
+   using var output=new MemoryStream();using var options=new EncoderParameters(1);options.Param[0]=new EncoderParameter(System.Drawing.Imaging.Encoder.Quality,Math.Max(25L,50L-attempt*5));image.Save(output,codec,options);
+   if(output.Length<=FrameBudget)return output.ToArray();scale*=0.8;
+  }
+  throw new InvalidOperationException("Дэлгэцийн зургийг бэлтгэж чадсангүй.");
+ }
+
 }
 sealed class RemoteInput {
  [StructLayout(LayoutKind.Sequential)]struct INPUT{public uint type;public Union data;}

@@ -15,8 +15,10 @@ static class SelfTest {
    var wrong=Json(a.Seal("test",new{k="input"}));bool rejected=false;try{b.Open("other-session",wrong);}catch(CryptographicException){rejected=true;}Assert(rejected,"Session isolation failed");results.Add("ECDH, AES-GCM, replay and session isolation passed");
    byte[] jpeg=Desktop.Capture();using(var stream=new MemoryStream(jpeg))using(var image=Image.FromStream(stream)){Assert(image.Width<=1280&&image.Height<=720,"Capture dimensions");}results.Add("Native Windows screen capture passed");
    using(var viewer=new ViewerForm("test","12345678",false,_=>Task.CompletedTask,()=>{},()=>{})){viewer.Frame(jpeg);Assert(viewer.Controls.Count>0,"Viewer UI");}results.Add("Native viewer JPEG rendering passed");
+   using(var noise=new Bitmap(1920,1080)){var random=new Random(7);for(int y=0;y<noise.Height;y++)for(int x=0;x<noise.Width;x++)noise.SetPixel(x,y,Color.FromArgb(random.Next(256),random.Next(256),random.Next(256)));Assert(Desktop.Encode(noise).Length<=Desktop.FrameBudget,"Adaptive frame budget");}results.Add("High-entropy 1080p capture stays inside relay packet budget");
    TestInput();results.Add("Native Windows keyboard injection and release passed");
    Task.Run(()=>RoundTrip(jpeg)).GetAwaiter().GetResult();results.Add("Two native clients: live relay pairing, encrypted screen frame, encrypted input and disconnect passed");
+   GuiRegression.Run();results.Add("Two GUI clients: real consent, matching verification dialogs, at least 3 displayed frames and disconnect passed");
    File.WriteAllText("self-test-result.json",JsonSerializer.Serialize(new{ok=true,results},new JsonSerializerOptions{WriteIndented=true}));Environment.ExitCode=0;
   }catch(Exception e){File.WriteAllText("self-test-result.json",JsonSerializer.Serialize(new{ok=false,results,error=e.ToString()},new JsonSerializerOptions{WriteIndented=true}));Environment.ExitCode=1;}
  }

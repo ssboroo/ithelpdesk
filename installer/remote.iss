@@ -20,7 +20,7 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\RainyRemote.exe
 CloseApplications=yes
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
+Name: "desktopicon"; Description: "Ширээний товчлол үүсгэх"; Flags: unchecked
 [InstallDelete]
 Type: files; Name: "{app}\ITHelpdesk.exe"
 Type: files; Name: "{userdesktop}\IT Helpdesk Mongolia.lnk"
@@ -33,4 +33,4 @@ Source: "..\dist\native\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 Name: "{group}\RAINY Remote"; Filename: "{app}\RainyRemote.exe"
 Name: "{autodesktop}\RAINY Remote"; Filename: "{app}\RainyRemote.exe"; Tasks: desktopicon
 [Run]
-Filename: "{app}\RainyRemote.exe"; Description: "Launch RAINY Remote"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\RainyRemote.exe"; Description: "RAINY Remote нээх"; Flags: nowait postinstall skipifsilent
